@@ -4,7 +4,7 @@
 
 #include <fstream>
 #include <cctype>
-#include "lib/Lexer.h"
+#include "include/Lexer.h"
 
 using namespace std;
 

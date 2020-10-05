@@ -1,6 +1,5 @@
 #include <iostream>
-#include <fstream>
-#include "lib/Lexer.h"
+#include "include/Lexer.h"
 
 using namespace std;
 
