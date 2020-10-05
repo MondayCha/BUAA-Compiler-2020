@@ -1,0 +1,15 @@
+/cmake-build-debug
+/-- -target x86_64-w64-windows-gnu
+/.idea
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+#Output
+*.zip

@@ -1,0 +1,85 @@
+const int CHOU = 114514;
+const char CHAR_ADD = '+', CHAR_MUL = '*', CHAR_ALPHA = 'a', CHAR_NUM = '1';
+
+void printMyCode(int canPrint)
+{
+    if (canPrint == 1)
+    {
+        printf("18373580");
+    };
+    return;
+}
+
+int printLeave(int timeOfCicle)
+{
+    int count;
+    count = timeOfCicle;
+    while (count > 0)
+    {
+        printf("18373580");
+        count = count - 1;
+    }
+    return(1);
+}
+
+void main()
+{
+    int matrix1_m, matrix1_n, matrix2_m, matrix2_n;
+    int i, j, k, t;
+    int tempForScanf;
+    int matrix_a[4][4], matrix_b[4][4];
+    int answer[4][4] = {{0, +0, -0, 0}, {0, +0, -0, 0}, {0, +0, -0, 0}, {0, +0, -0, 0}};
+    int maxAnswerOfAll = 0;
+
+    printMyCode(1);
+
+    scanf(matrix1_m);
+    scanf(matrix1_n);
+    scanf(matrix2_m);
+    scanf(matrix2_n);
+
+    if (matrix1_m > 4)
+    {
+        printLeave(9);
+    }
+    else
+    {
+        for (i = 0; i < matrix1_m; i = i + 1)
+        {
+            for (j = 0; j < matrix1_n; j = j + 1)
+            {
+                scanf(tempForScanf);
+                matrix_a[i][j] = tempForScanf;
+            }
+        }
+        for (i = 0; i < matrix2_m; i = i + 1)
+        {
+            for (j = 0; j < matrix2_n; j = j + 1)
+            {
+                scanf(tempForScanf);
+                matrix_b[i][j] = tempForScanf;
+            }
+        }
+        for (i = 0; i < matrix1_m - matrix2_m + 1; i = i + 1)
+        {
+            for (j = 0; j < matrix1_n - matrix2_n + 1; j = j + 1)
+            {
+                for (k = 0; k < matrix2_m; k = k + 1)
+                {
+                    for (t = 0; t < matrix2_n; t = t + 1)
+                    {
+                        answer[i][j] = answer[i][j] + matrix_a[i + k][j + t] * matrix_b[k][t];
+                    }
+                }
+            }
+        }
+        tempForScanf = answer[0][0];
+        printf("answer[0][0] is ", tempForScanf);
+        for (i = 4; i > 0; i = i - 1)
+        {
+            printMyCode(1);
+        }
+        printLeave(4);
+    }
+    return;
+}
