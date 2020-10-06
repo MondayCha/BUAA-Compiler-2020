@@ -18,7 +18,7 @@ enum TypeCode {
     CHARTK, SCANFTK, GEQ, RBRACK,
     VOIDTK, PRINTFTK, EQL, LBRACE,
     MAINTK, RETURNTK, NEQ, RBRACE,
-    IFTK, PLUS, COLON, WRONG
+    IFTK, PLUS, COLON, WRONG, READEOF
 };
 
 const map<string, TypeCode> reservedWordMap = {

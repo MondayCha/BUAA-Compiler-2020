@@ -1,5 +1,6 @@
 #include <iostream>
 #include "include/Lexer.h"
+#include "include/GrammarAnalyzer.h"
 
 using namespace std;
 
@@ -12,7 +13,9 @@ int main() {
         return 1;
     }
     ofstream fileOut(outputFile);
-    Lexer scanner = Lexer::getInstance(fileIn, fileOut);
-    while (scanner.getNextToken());
+    Lexer scanner = Lexer::getInstance(fileIn,fileOut);
+    SymbolTable symbolTable = SymbolTable::getInstance();
+    GrammarAnalyzer grammarAnalyzer = GrammarAnalyzer::getInstance(scanner,symbolTable,fileOut);
+    grammarAnalyzer.analyzeGrammar();
     return 0;
 }
