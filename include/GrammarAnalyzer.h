@@ -15,7 +15,7 @@
 #define TYPE_ADDE (TOKEN_TYPE == PLUS || TOKEN_TYPE == MINU)
 #define CHECK_GET(A, B) {\
 if(TOKEN_TYPE != A){\
-cerr << B;\
+cerr << B << endl;\
 }\
 PRINT_GET;\
 }
@@ -70,7 +70,6 @@ public:
 
     void varInitAnalyzer(int level, int length1, int length2, bool isInteger);
 
-
     void constantAnalyzer(bool isInteger);
 
     void parameterTableAnalyzer();
@@ -91,9 +90,37 @@ public:
 
     void expressionAnalyzer();
 
-    void relationalOperatorAnalyzer();
-
     void itemAnalyzer();
+
+    void conditionalStatementAnalyzer();
+
+    void arrayAssignAnalyzer();
+
+    void assignStatementAnalyzer();
+
+    void factorAnalyzer();
+
+    void returnStatementAnalyzer();
+
+    void readStatementAnalyzer();
+
+    void writeStatementAnalyzer();
+
+    void functionDeclarationAnalyzer();
+
+    void functionCallAnalyzer(string name, bool type);
+
+    void valParaTableAnalyzer();
+
+    void stringAnalyzer();
+
+    void switchStatementAnalyzer();
+
+    void situationSwitchAnalyzer();
+
+    void constantAnalyzer();
+
+    void defaultSwitchAnalyzer();
 };
 
 

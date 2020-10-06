@@ -29,7 +29,9 @@ void GrammarAnalyzer::programAnalyzer() {
     if (TYPE_IDEN) {
         varDeclarationAnalyzer();
     }
-    // {＜有返回值函数定义＞|＜无返回值函数定义＞}
+    // {＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞
+    functionDeclarationAnalyzer();
+    outFile << "<程序>" << endl;
 }
 
 /*＜常量说明＞ ::=  const＜常量定义＞;{ const＜常量定义＞;} */
@@ -139,6 +141,7 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
     string tmp_identity, tmp_output1, tmp_output2, tmp_output3;
     TypeCode tmp_typeCode = WRONG;
     bool meetFunc = false;
+    int loopTime = 0;
     do {
         // ＜变量定义无初始化＞|＜变量定义及初始化＞|＜有返回值函数定义＞
         // ＜类型标识符＞
@@ -151,7 +154,9 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
         lexer.getNextToken();
         // ＜有返回值函数定义＞
         if (TOKEN_TYPE == LPARENT) {
-            outFile << "<变量说明>" << endl;
+            if (loopTime != 0) {
+                outFile << "<变量说明>" << endl;
+            }
             outFile << tmp_output1;
             outFile << tmp_output2;
             // cout << "func jump " << tmp_identity + "\n";
@@ -173,6 +178,7 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
         if (meetFunc) {
             return;
         }
+        ++loopTime;
     } while (TYPE_IDEN);
     outFile << "<变量说明>" << endl;
 }
@@ -232,24 +238,22 @@ string GrammarAnalyzer::varDefinitionAnalyzer(TypeCode typeCode) {
     return "<变量定义无初始化>\n";
 }
 
-void GrammarAnalyzer::reValFuncDefAnalyzer() {
-
-}
-
 /*特殊的有返回值函数*/
 /*＜有返回值函数定义＞  ::=  ＜声明头部＞'('＜参数表＞')' '{'＜复合语句＞'}'*/
 void GrammarAnalyzer::speReValFuncDefAnalyzer() {
     outFile << "<声明头部>" << endl;
     // '('
     CHECK_GET(LPARENT, "speReValFuncDefAnalyzer()");
-    // ＜参数表＞')'
+    // ＜参数表＞
     parameterTableAnalyzer();
+    CHECK_GET(RPARENT, "speReValFuncDefAnalyzer()");
     // '{'
     CHECK_GET(LBRACE, "speReValFuncDefAnalyzer()");
-    //＜复合语句＞'}'
+    //＜复合语句＞
     compoundStatementAnalyzer();
     //'}'
     CHECK_GET(RBRACE, "speReValFuncDefAnalyzer()");
+    outFile << "<有返回值函数定义>" << endl;
 }
 
 /*'['＜无符号整数＞']'|'['＜无符号整数＞']''['＜无符号整数＞']'
@@ -329,9 +333,18 @@ void GrammarAnalyzer::constantAnalyzer(bool isInteger) {
     if (isInteger) {
         integerAnalyzer();
     } else {
-        if (TOKEN_TYPE != CHARTK) { ;//error
+        if (TOKEN_TYPE != CHARCON) { ;//error
         }
         PRINT_GET;
+    }
+    outFile << "<常量>" << endl;
+}
+
+void GrammarAnalyzer::constantAnalyzer() {
+    if (TOKEN_TYPE == CHARCON) {
+        PRINT_GET;
+    } else {
+        integerAnalyzer();
     }
     outFile << "<常量>" << endl;
 }
@@ -349,7 +362,6 @@ void GrammarAnalyzer::parameterTableAnalyzer() {
     }
     if (TOKEN_TYPE == RPARENT) {
         outFile << "<参数表>" << endl;
-        PRINT_GET;
     } else {
         cerr << "error in para";
     }
@@ -386,15 +398,17 @@ void GrammarAnalyzer::compoundStatementAnalyzer() {
 void GrammarAnalyzer::statementColumnAnalyzer() {
     while (statementAnalyzer()) { ;
     }
-    if (TOKEN_TYPE == RBRACE) {
+    outFile << "<语句列>" << endl;
+/*    if (TOKEN_TYPE == RBRACE) {
         outFile << "<语句列>" << endl;
-    }
+    }*/
 }
 
 /*＜语句＞    ::= ＜循环语句＞｜＜条件语句＞| ＜有返回值函数调用语句＞;
  * |＜无返回值函数调用语句＞;｜＜赋值语句＞;｜＜读语句＞;
  * ｜＜写语句＞;｜＜情况语句＞｜＜空＞;|＜返回语句＞; | '{'＜语句列＞'}'*/
 bool GrammarAnalyzer::statementAnalyzer() {
+    // 语句列为空
     if (TOKEN_TYPE == RBRACE) {
         return false;
     }
@@ -409,42 +423,45 @@ bool GrammarAnalyzer::statementAnalyzer() {
         loopStatementAnalyzer();
     }
         // ＜条件语句＞|
-    else if () {
-
-    }
-        // ＜有返回值函数调用语句＞;
-    else if () {
-
-    }
-        // ＜无返回值函数调用语句＞;
-    else if () {
-
-    }
-        // ＜赋值语句＞;
-    else if () {
-
-    }
-        // ＜读语句＞;
-    else if () {
-
-    }
-        // ＜写语句＞;
-    else if () {
-
+    else if (TOKEN_TYPE == IFTK) {
+        conditionalStatementAnalyzer();
     }
         // ＜情况语句＞
-    else if () {
-
-    }
-        // ＜空＞;
-    else if (TOKEN_TYPE == SEMICN) {
-        PRINT_GET;
-    }
-        // ＜返回语句＞;
-    else if () {
-
+    else if (TOKEN_TYPE == SWITCHTK) {
+        switchStatementAnalyzer();
     } else {
-        return false;
+        // ＜有返回值函数调用语句＞;
+        // ＜无返回值函数调用语句＞;
+        // ＜赋值语句＞;
+        if (TOKEN_TYPE == IDENFR) {
+            string tmp_name = lexer.lexToken.content_p;
+            PRINT_GET;
+            if (TOKEN_TYPE == LPARENT) {
+                // 函数调用语句
+                functionCallAnalyzer(tmp_name, false);
+            } else {
+                // 赋值语句
+                assignStatementAnalyzer();
+            }
+        }
+            // ＜读语句＞;
+        else if (TOKEN_TYPE == SCANFTK) {
+            readStatementAnalyzer();
+        }
+            // ＜写语句＞;
+        else if (TOKEN_TYPE == PRINTFTK) {
+            writeStatementAnalyzer();
+        }
+            // ＜返回语句＞;
+        else if (TOKEN_TYPE == RETURNTK) {
+            returnStatementAnalyzer();
+        }
+        //;
+        if (TOKEN_TYPE == SEMICN) {
+            PRINT_GET;
+        } else {
+            return false;
+        }
     }
     outFile << "<语句>" << endl;
     return true;
@@ -472,6 +489,9 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         expressionAnalyzer();
         //;
         CHECK_GET(SEMICN, "forStatementAnalyzer()");
+        conditionAnalyzer();
+        //;
+        CHECK_GET(SEMICN, "forStatementAnalyzer()");
         //＜标识符＞
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //＝
@@ -486,6 +506,7 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         }
         //＜步长＞
         unsignedIntAnalyzer();
+        outFile << "<步长>" << endl;
         // ')'
         CHECK_GET(RPARENT, "forStatementAnalyzer()");
         // ＜语句＞
@@ -521,7 +542,237 @@ void GrammarAnalyzer::expressionAnalyzer() {
     outFile << "<表达式>" << endl;
 }
 
+/*＜项＞     ::= ＜因子＞{＜乘法运算符＞＜因子＞}*/
 void GrammarAnalyzer::itemAnalyzer() {
-
+    factorAnalyzer();
+    while (TOKEN_TYPE == MULT || TOKEN_TYPE == DIV) {
+        PRINT_GET;
+        factorAnalyzer();
+    }
+    outFile << "<项>" << endl;
 }
+
+/* ＜因子＞    ::=
+ * ＜标识符＞｜
+ * ＜标识符＞'['＜表达式＞']'|
+ * ＜标识符＞'['＜表达式＞']''['＜表达式＞']'|
+ * '('＜表达式＞')'｜
+ * ＜整数＞|
+ * ＜字符＞｜
+ * ＜有返回值函数调用语句＞*/
+void GrammarAnalyzer::factorAnalyzer() {
+    if (TOKEN_TYPE == LPARENT) {
+        PRINT_GET;
+        expressionAnalyzer();
+        CHECK_GET(RPARENT, "FACTOR");
+    } else if (TOKEN_TYPE == IDENFR) {
+        string name = lexer.lexToken.content_p;
+        PRINT_GET;
+        if (TOKEN_TYPE == LBRACK) {
+            arrayAssignAnalyzer();
+        } else if (TOKEN_TYPE == LPARENT) {
+            functionCallAnalyzer(name, true);
+        }
+    } else if (TOKEN_TYPE == CHARCON) {
+        PRINT_GET;
+    } else {
+        integerAnalyzer();
+        // check
+    }
+    outFile << "<因子>" << endl;
+}
+
+/*＜条件语句＞  ::= if '('＜条件＞')'＜语句＞［else＜语句＞］*/
+void GrammarAnalyzer::conditionalStatementAnalyzer() {
+    CHECK_GET(IFTK, "if");
+    CHECK_GET(LPARENT, "(");
+    conditionAnalyzer();
+    CHECK_GET(RPARENT, ")");
+    statementAnalyzer();
+    if (TOKEN_TYPE == ELSETK) {
+        PRINT_GET;
+        statementAnalyzer();
+    }
+    outFile << "<条件语句>" << endl;
+}
+
+void GrammarAnalyzer::arrayAssignAnalyzer() {
+    CHECK_GET(LBRACK, "ASSIGN");
+    expressionAnalyzer();
+    CHECK_GET(RBRACK, "ASSIGN");
+    if (TOKEN_TYPE == LBRACK) {
+        PRINT_GET;
+        expressionAnalyzer();
+        CHECK_GET(RBRACK, "ASSIGN");
+    }
+}
+
+/*＜赋值语句＞   ::=  ＜标识符＞＝＜表达式＞|
+ * ＜标识符＞'['＜表达式＞']'=＜表达式＞|
+ * ＜标识符＞'['＜表达式＞']''['＜表达式＞']' =＜表达式＞*/
+void GrammarAnalyzer::assignStatementAnalyzer() {
+    //标识符已读
+    if (TOKEN_TYPE == LBRACK) {
+        arrayAssignAnalyzer();
+    }
+    CHECK_GET(ASSIGN, "ASSIGN =");
+    expressionAnalyzer();
+    outFile << "<赋值语句>" << endl;
+}
+
+/*＜返回语句＞   ::=  return['('＜表达式＞')']*/
+void GrammarAnalyzer::returnStatementAnalyzer() {
+    CHECK_GET(RETURNTK, "return keyword");
+    if (TOKEN_TYPE == LPARENT) {
+        PRINT_GET;
+        expressionAnalyzer();
+        CHECK_GET(RPARENT, "returnStatementAnalyzer");
+    }
+    outFile << "<返回语句>" << endl;
+}
+
+/*＜读语句＞ ::=  scanf '('＜标识符＞')'*/
+void GrammarAnalyzer::readStatementAnalyzer() {
+    CHECK_GET(SCANFTK, "SC");
+    CHECK_GET(LPARENT, "SC(");
+    CHECK_GET(IDENFR, "identity");
+    CHECK_GET(RPARENT, "SC)");
+    outFile << "<读语句>" << endl;
+}
+
+/*＜写语句＞    ::=
+ * printf '(' ＜字符串＞,＜表达式＞ ')'|
+ * printf '('＜字符串＞ ')'|
+ * printf '('＜表达式＞')' */
+void GrammarAnalyzer::writeStatementAnalyzer() {
+    CHECK_GET(PRINTFTK, "PR");
+    CHECK_GET(LPARENT, "(");
+    // ＜字符串＞
+    if (TOKEN_TYPE == STRCON) {
+        stringAnalyzer();
+        if (TOKEN_TYPE == COMMA) {
+            PRINT_GET;
+            expressionAnalyzer();
+        }
+    } else {
+        expressionAnalyzer();
+    }
+    CHECK_GET(RPARENT, ")");
+    outFile << "<写语句>" << endl;
+}
+
+/*{＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞*/
+void GrammarAnalyzer::functionDeclarationAnalyzer() {
+    do {
+        if (TOKEN_TYPE == VOIDTK) {
+            // ＜无返回值函数定义＞＜主函数＞
+            PRINT_GET;
+            if (TOKEN_TYPE == MAINTK) {
+                // ＜主函数＞
+                PRINT_GET;
+                CHECK_GET(LPARENT, "( main");
+                CHECK_GET(RPARENT, ") main");
+                CHECK_GET(LBRACE, "{ main");
+                compoundStatementAnalyzer();
+                CHECK_GET(RBRACE, "} main");
+                outFile << "<主函数>" << endl;
+                return;
+            } else {
+                // ＜无返回值函数定义＞  ::= void＜标识符＞
+                symbolTable.addFunc(lexer.lexToken.content_p, false);
+                PRINT_GET;
+                // '('＜参数表＞')''{'＜复合语句＞'}'
+                CHECK_GET(LPARENT, "( main");
+                parameterTableAnalyzer();
+                CHECK_GET(RPARENT, ") main");
+                CHECK_GET(LBRACE, "{ main");
+                compoundStatementAnalyzer();
+                CHECK_GET(RBRACE, "} main");
+                outFile << "<无返回值函数定义>" << endl;
+            }
+        } else if (TYPE_IDEN) {
+            // ＜有返回值函数定义＞  ::=  ＜声明头部＞'('＜参数表＞')' '{'＜复合语句＞'}'
+            PRINT_GET;
+            symbolTable.addFunc(lexer.lexToken.content_p, true);
+            PRINT_GET;
+            speReValFuncDefAnalyzer();
+        }
+    } while (true);
+}
+
+/*
+ * 函数调用语句
+ * type = true: must be reFuncCall
+ * ＜有返回值函数调用语句＞ ::= ＜标识符＞'('＜值参数表＞')'
+ * ＜无返回值函数调用语句＞ ::= ＜标识符＞'('＜值参数表＞')'
+ */
+void GrammarAnalyzer::functionCallAnalyzer(string name, bool type) {
+    if (type && !symbolTable.checkFunc(name)) {
+        cerr << "Not A function call statement with a return value\n";
+    }
+    CHECK_GET(LPARENT, "func call (");
+    valParaTableAnalyzer();
+    CHECK_GET(RPARENT, "func call )");
+    if (symbolTable.checkFunc(name)) {
+        outFile << "<有返回值函数调用语句>" << endl;
+    } else {
+        outFile << "<无返回值函数调用语句>" << endl;
+    }
+}
+
+/*＜值参数表＞   ::= ＜表达式＞{,＜表达式＞}｜＜空＞*/
+void GrammarAnalyzer::valParaTableAnalyzer() {
+    if (TOKEN_TYPE == RPARENT) {
+        // ＜空＞
+    } else {
+        expressionAnalyzer();
+        while (TOKEN_TYPE == COMMA) {
+            PRINT_GET;
+            expressionAnalyzer();
+        }
+    }
+    outFile << "<值参数表>" << endl;
+}
+
+/*＜字符串＞   ::=  "｛十进制编码为32,33,35-126的ASCII字符｝"*/
+void GrammarAnalyzer::stringAnalyzer() {
+    CHECK_GET(STRCON, "str con");
+    outFile << "<字符串>" << endl;
+}
+
+/*＜情况语句＞  ::=  switch ‘(’＜表达式＞‘)’ ‘{’＜情况表＞＜缺省＞‘}’*/
+void GrammarAnalyzer::switchStatementAnalyzer() {
+    CHECK_GET(SWITCHTK, "switch");
+    CHECK_GET(LPARENT, "func call (");
+    expressionAnalyzer();
+    CHECK_GET(RPARENT, "func call )");
+    CHECK_GET(LBRACE, "{ main");
+    situationSwitchAnalyzer();
+    defaultSwitchAnalyzer();
+    CHECK_GET(RBRACE, "} main");
+    outFile << "<情况语句>" << endl;
+}
+
+/*＜情况表＞   ::=  ＜情况子语句＞{＜情况子语句＞} */
+void GrammarAnalyzer::situationSwitchAnalyzer() {
+    do {
+        // ＜情况子语句＞  ::=  case＜常量＞：＜语句＞
+        CHECK_GET(CASETK, "CASE");
+        constantAnalyzer();
+        CHECK_GET(COLON, "CASE");
+        statementAnalyzer();
+        outFile << "<情况子语句>" << endl;
+    } while (TOKEN_TYPE == CASETK);
+    outFile << "<情况表>" << endl;
+}
+
+/*＜缺省＞   ::=  default :＜语句＞*/
+void GrammarAnalyzer::defaultSwitchAnalyzer() {
+    CHECK_GET(DEFAULTTK, "default");
+    CHECK_GET(COLON, "default");
+    statementAnalyzer();
+    outFile << "<缺省>" << endl;
+}
+
+
 
