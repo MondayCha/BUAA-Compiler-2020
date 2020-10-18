@@ -7,7 +7,7 @@
 
 #include "Lexer.h"
 #include "SymbolTable.h"
-
+//
 #define GET_TOKEN lexer.getNextToken()
 #define PRINT_LEX {outFile << lexer.analyzerResult;}
 #define PRINT_GET {outFile << lexer.analyzerResult;lexer.getNextToken();}
