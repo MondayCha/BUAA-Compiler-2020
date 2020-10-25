@@ -35,6 +35,8 @@ public:
 
     bool hasIdenName(string &name);
 
+    bool hasIdenNameIncludeGlobal(string &name);
+
     bool hasFuncName(string &name);
 
     void insertSymbolToLocal(const Symbol &symbol);
@@ -42,6 +44,8 @@ public:
     void insertFuncToGlobal(const FuncSym &funcSym);
 
     void endGlobalIdenSymbol();
+
+    void endLocalIdenSymbol();
 
     bool isFuncHasReturn(string &name);
 

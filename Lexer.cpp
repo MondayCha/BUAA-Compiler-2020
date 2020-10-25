@@ -85,6 +85,7 @@ void Lexer::getNextToken() {
     else if (lex_c == '\'') {
         lex_c = inFile.get();
         // check if char variable is legal (not yet)
+        // 字符中出现非法的符号
         if (errorHandle.checkIllegalCharReturnNull(lex_c, lineNum, findError)) {
             lex_c = inFile.get();
         } else {
@@ -108,7 +109,8 @@ void Lexer::getNextToken() {
         lex_c = inFile.get();
         // There are no symbols in the string
         if (lex_c == '\"') {
-            // empty string
+            // empty string 符号串中无任何符号
+            errorHandle.printErrorLine('a', lineNum);
             strToken = "";
         } else {
             do {

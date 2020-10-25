@@ -9,7 +9,7 @@
 #include "SymbolTable.h"
 #include "ErrorHandle.h"
 
-// #define CLOSE_GRAMMER_OUTPUT
+#define CLOSE_GRAMMER_OUTPUT
 
 #define GET_TOKEN lexer.getNextToken()
 
@@ -29,13 +29,14 @@ PRINT_GET;\
 }
 #define CHECK_RPARENT \
 if (TOKEN_TYPE != RPARENT) {\
-PRINT_G_ERR('l')\
+errorHandle.printErrorLine('l', lexer.lastLineNum);\
 }else{\
 PRINT_GET\
 }
+
 #define CHECK_RBRACK \
 if (TOKEN_TYPE != RBRACK) {\
-PRINT_G_ERR('m')\
+errorHandle.printErrorLine('m', lexer.lastLineNum);\
 }else{\
 PRINT_GET\
 }
@@ -80,6 +81,8 @@ public:
 
     int integerAnalyzer();
 
+    int integerAnalyzer(bool &checkBit);
+
     int unsignedIntAnalyzer();
 
     void charAssignAnalyzer();
@@ -110,7 +113,7 @@ public:
 
     void statementColumnAnalyzer();
 
-    bool statementAnalyzer();
+    void statementAnalyzer();
 
     void loopStatementAnalyzer();
 

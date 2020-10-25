@@ -87,15 +87,25 @@ void GrammarAnalyzer::constDefinitionAnalyzer() {
 }
 
 /*＜整数＞::= ［＋｜－］＜无符号整数＞*/
-int GrammarAnalyzer::integerAnalyzer() {
+int GrammarAnalyzer::integerAnalyzer(bool &checkBit) {
     bool symbol = true;
     if (TOKEN_TYPE == MINU || TOKEN_TYPE == PLUS) {
         symbol = !(TOKEN_TYPE == MINU);
         PRINT_GET
     }
     int ans = unsignedIntAnalyzer();
+    if (ans == -1) {
+        checkBit = false;
+    } else {
+        checkBit = true;
+    }
     PRINT_MES(("<整数>"))
     return symbol ? ans : 0 - ans;
+}
+
+int GrammarAnalyzer::integerAnalyzer() {
+    bool noCheck = false;
+    return integerAnalyzer(noCheck);
 }
 
 /*＜无符号整数＞  ::= ＜数字＞｛＜数字＞｝*/
@@ -126,7 +136,7 @@ void GrammarAnalyzer::intAssignAnalyzer() {
             PRINT_GET
             // <常量>类型不一致
             if (TOKEN_TYPE == CHARCON) {
-                PRINT_G_ERR('o')
+                // PRINT_G_ERR('o')
                 content = characterAnalyzer();
             } else {
                 // ＜整数＞
@@ -157,7 +167,7 @@ void GrammarAnalyzer::charAssignAnalyzer() {
                 content = characterAnalyzer();
             } else {
                 // ＜整数＞
-                PRINT_G_ERR('o')
+                // PRINT_G_ERR('o')
                 content = integerAnalyzer();
             }
             content = characterAnalyzer();
@@ -310,6 +320,7 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     if (!errorHandle.checkDupFuncDefine(lowerName, LEX_LINE)) {
         symbolTable.insertFuncToGlobal(funcSym);
     }
+    // 有参数函数定义
     CHECK_RPARENT
     // '{'
     CHECK_GET(LBRACE, "speReValFuncDefAnalyzer {");
@@ -323,6 +334,7 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     }
     CHECK_GET(RBRACE, "speReValFuncDefAnalyzer }");
     PRINT_MES(("<有返回值函数定义>"))
+    symbolTable.endLocalIdenSymbol();
     grammar_func_with_return = VOID;
     grammar_state_with_return = false;
 }
@@ -501,22 +513,21 @@ void GrammarAnalyzer::compoundStatementAnalyzer() {
 
 /*＜语句列＞   ::= ｛＜语句＞｝*/
 void GrammarAnalyzer::statementColumnAnalyzer() {
-    while (statementAnalyzer()) { ;
+    if (TOKEN_TYPE != RBRACE) {
+        while (TOKEN_TYPE == LBRACE || TOKEN_TYPE == WHILETK || TOKEN_TYPE == FORTK || TOKEN_TYPE == IFTK
+               || TOKEN_TYPE == SWITCHTK || TOKEN_TYPE == IDENFR || TOKEN_TYPE == SCANFTK || TOKEN_TYPE == PRINTFTK
+               || TOKEN_TYPE == RETURNTK || TOKEN_TYPE == SEMICN) {
+            statementAnalyzer();
+        }
     }
+    // else 语句列为空
     PRINT_MES(("<语句列>"))
-/*    if (TOKEN_TYPE == RBRACE) {
-        PRINT_MES(("<语句列>"))
-    }*/
 }
 
 /*＜语句＞    ::= ＜循环语句＞｜＜条件语句＞| ＜有返回值函数调用语句＞;
  * |＜无返回值函数调用语句＞;｜＜赋值语句＞;｜＜读语句＞;
  * ｜＜写语句＞;｜＜情况语句＞｜＜空＞;|＜返回语句＞; | '{'＜语句列＞'}'*/
-bool GrammarAnalyzer::statementAnalyzer() {
-    // 语句列为空
-    if (TOKEN_TYPE == RBRACE) {
-        return false;
-    }
+void GrammarAnalyzer::statementAnalyzer() {
     // '{'＜语句列＞'}'
     if (TOKEN_TYPE == LBRACE) {
         PRINT_GET
@@ -548,34 +559,23 @@ bool GrammarAnalyzer::statementAnalyzer() {
                 // 赋值语句
                 assignStatementAnalyzer(tmp_lower_name);
             }
-            CHECK_SEMICN
         }
             // ＜读语句＞;
         else if (TOKEN_TYPE == SCANFTK) {
             readStatementAnalyzer();
-            CHECK_SEMICN
         }
             // ＜写语句＞;
         else if (TOKEN_TYPE == PRINTFTK) {
             writeStatementAnalyzer();
-            CHECK_SEMICN
         }
             // ＜返回语句＞;
         else if (TOKEN_TYPE == RETURNTK) {
             returnStatementAnalyzer();
-            CHECK_SEMICN
         }
-            //;
-        else if (TOKEN_TYPE == SEMICN) {
-            PRINT_GET
-        }
-            // 不是语句
-        else {
-            return false;
-        }
+        //;
+        CHECK_SEMICN
     }
     PRINT_MES(("<语句>"))
-    return true;
 }
 
 /*＜循环语句＞   ::=  while '('＜条件＞')'＜语句＞|
@@ -586,6 +586,7 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         CHECK_GET(LPARENT, "whileStatementAnalyzer()");
         conditionAnalyzer();
         // CHECK_//GET(RPARENT, "whileStatementAnalyzer()");
+        // while
         CHECK_RPARENT
         statementAnalyzer();
     } else if (TOKEN_TYPE == FORTK) {
@@ -594,6 +595,10 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         //'('
         CHECK_GET(LPARENT, "forStatementAnalyzer()");
         //＜标识符＞
+        // 未定义的名字
+        errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
+        // 不能改变常量的值
+        errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //＝
         CHECK_GET(ASSIGN, "forStatementAnalyzer()");
@@ -607,10 +612,16 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         //CHECK_//GET(SEMICN, "forStatementAnalyzer()");
         CHECK_SEMICN
         //＜标识符＞
+        // 未定义的名字
+        errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
+        // 不能改变常量的值
+        errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //＝
         CHECK_GET(ASSIGN, "forStatementAnalyzer()");
         //＜标识符＞
+        // 未定义的名字
+        errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //(+|-)
         if (TYPE_ADDE) {
@@ -623,6 +634,7 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         PRINT_MES(("<步长>"))
         // ')'
         // CHECK_//GET(RPARENT, "forStatementAnalyzer()");
+        // FOR
         CHECK_RPARENT
         // ＜语句＞
         statementAnalyzer();
@@ -689,12 +701,10 @@ SymbolType GrammarAnalyzer::itemAnalyzer() {
  * ＜有返回值函数调用语句＞*/
 SymbolType GrammarAnalyzer::factorAnalyzer() {
     SymbolType returnValue = VOID;
-    // cerr << LEX_LONA << endl;
     if (TOKEN_TYPE == LPARENT) {
         // '('＜表达式＞')'
         PRINT_GET
         expressionAnalyzer();
-        //CHECK_//GET(RPARENT, "FACTOR");
         CHECK_RPARENT
         // 字符型一旦参与运算则转换成整型，包括小括号括起来的字符型，也算参与了运算，例如(‘c’)的结果是整型
         returnValue = INT;
@@ -712,15 +722,16 @@ SymbolType GrammarAnalyzer::factorAnalyzer() {
         } else {
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
             returnValue = symbolTable.getIdenType(lower_name);
-            // cout << "lower name is " << lower_name << " type is " << returnValue << endl;
         }
-        // cout << "/////// lower name is " << lower_name << endl;
     } else if (TOKEN_TYPE == CHARCON) {
         PRINT_GET
         returnValue = CHAR;
     } else {
-        integerAnalyzer();
-        returnValue = INT;
+        bool isInteger = false;
+        integerAnalyzer(isInteger);
+        if (isInteger) {
+            returnValue = INT;
+        }
         // check
     }
     PRINT_MES(("<因子>"))
@@ -733,6 +744,7 @@ void GrammarAnalyzer::conditionalStatementAnalyzer() {
     CHECK_GET(LPARENT, "(");
     conditionAnalyzer();
     //CHECK_//GET(RPARENT, ")");
+    // if
     CHECK_RPARENT
     statementAnalyzer();
     if (TOKEN_TYPE == ELSETK) {
@@ -778,20 +790,22 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
     if (TOKEN_TYPE == LPARENT) {
         // return (
         PRINT_GET
-        if (grammar_func_with_return == VOID) {
-            // 无返回值的函数出现了形如return(表达式);或return();的语句
-            errorHandle.printErrorOfNoReturnMatch(LEX_LINE);
-        } else if (TOKEN_TYPE == RPARENT) {
+        if (grammar_func_with_return != VOID && TOKEN_TYPE == RPARENT) {
             // 有返回值的函数有形如return();的语句
             errorHandle.printErrorOfReturnMatch(LEX_LINE);
-        } else {
-            // 有返回值的函数return语句中表达式类型与返回值类型不一致
-            SymbolType expType = expressionAnalyzer();
-            if (grammar_func_with_return != expType) {
-                errorHandle.printErrorOfReturnMatch(LEX_LINE);
-            }
-            CHECK_RPARENT
+        } else if (grammar_func_with_return == VOID) {
+            // 无返回值的函数出现了形如return(表达式);或return();的语句
+            errorHandle.printErrorOfNoReturnMatch(LEX_LINE);
         }
+        // 有返回值的函数return语句中表达式类型与返回值类型不一致
+        SymbolType expType = expressionAnalyzer();
+        if (grammar_func_with_return != VOID && grammar_func_with_return != expType) {
+            errorHandle.printErrorOfReturnMatch(LEX_LINE);
+        }
+        // RETURN
+        CHECK_RPARENT
+    } else if (grammar_func_with_return != VOID) {
+        errorHandle.printErrorOfReturnMatch(LEX_LINE);
     }
     grammar_state_with_return = true;
     PRINT_MES(("<返回语句>"))
@@ -846,10 +860,12 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
                 PRINT_GET
                 CHECK_GET(LPARENT, "( main");
                 //CHECK_//GET(RPARENT, ") main");
+                // 无参数函数定义
                 CHECK_RPARENT
                 CHECK_GET(LBRACE, "{ main");
                 compoundStatementAnalyzer();
                 CHECK_GET(RBRACE, "} main");
+                symbolTable.endLocalIdenSymbol();
                 PRINT_MES(("<主函数>"))
                 return;
             } else {
@@ -860,10 +876,15 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
                 CHECK_GET(LPARENT, "( main");
                 parameterTableAnalyzer(funcSym, true);
                 //CHECK_//GET(RPARENT, ") main");
+                if (!errorHandle.checkDupFuncDefine(funcSym.lowerName, LEX_LINE)) {
+                    symbolTable.insertFuncToGlobal(funcSym);
+                }
+                // 无参数函数定义
                 CHECK_RPARENT
                 CHECK_GET(LBRACE, "{ main");
                 compoundStatementAnalyzer();
                 CHECK_GET(RBRACE, "} main");
+                symbolTable.endLocalIdenSymbol();
                 PRINT_MES(("<无返回值函数定义>"))
             }
         } else if (TYPE_IDEN) {
@@ -892,6 +913,7 @@ SymbolType GrammarAnalyzer::functionCallAnalyzer(string &lower_name) {
         vector<VarSym> vectorVar = symbolTable.getFuncParams(lower_name);
         valParaTableAnalyzer(vectorVar);
         //CHECK_//GET(RPARENT, "func call )");
+        // 有/无参数函数调用
         CHECK_RPARENT
         if (funcType != VOID) {
             PRINT_MES(("<有返回值函数调用语句>"))
@@ -914,11 +936,15 @@ void GrammarAnalyzer::valParaTableAnalyzer(vector<VarSym> &vectorVar) {
         // ＜空＞
     } else {
         SymbolType st = expressionAnalyzer();
-        referParamsList.push_back(st);
+        if (st != VOID) {
+            referParamsList.push_back(st);
+        }
         while (TOKEN_TYPE == COMMA) {
             PRINT_GET
             st = expressionAnalyzer();
-            referParamsList.push_back(st);
+            if (st != VOID) {
+                referParamsList.push_back(st);
+            }
         }
     }
     if (vectorVar.size() != referParamsList.size()) {
@@ -995,8 +1021,9 @@ void GrammarAnalyzer::readToRightBrack() {
         PRINT_GET
     }
     PRINT_GET
-    // cerr << "n" << endl;
 }
+
+
 
 
 

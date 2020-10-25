@@ -19,6 +19,15 @@ bool SymbolTable::hasIdenName(string &name) {
         // cout << "has iden name " << iter->second.name << " add is " << &(iter->second.name) << endl;
         return true;
     }
+    return false;
+}
+
+bool SymbolTable::hasIdenNameIncludeGlobal(string &name) {
+    auto iter = localIdenTable.find(name);
+    if (iter != localIdenTable.end()) {
+        // cout << "has iden name " << iter->second.name << " add is " << &(iter->second.name) << endl;
+        return true;
+    }
     auto iter1 = globalIdenTable.find(name);
     if (iter1 != globalIdenTable.end()) {
         return true;
@@ -32,6 +41,10 @@ void SymbolTable::insertSymbolToLocal(const Symbol &symbol) {
 
 void SymbolTable::endGlobalIdenSymbol() {
     globalIdenTable = move(localIdenTable);
+}
+
+void SymbolTable::endLocalIdenSymbol() {
+    localIdenTable.clear();
 }
 
 SymbolType SymbolTable::convertTypeCode(TypeCode typeCode) {

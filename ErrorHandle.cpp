@@ -31,7 +31,8 @@ bool ErrorHandle::checkIllegalCharReturnNull(char &content, int &lineNum, bool &
         findError = true;
         printErrorLine('a', lineNum);
         return true;
-    } else if (isalnum(content) || content == '+' || content == '-' || content == '*' || content == '/') {
+    } else if (isalnum(content) || content == '+' || content == '-' || content == '*' || content == '/' ||
+               content == '_') {
         return false;
     } else {
         // illegal symbol appears
@@ -54,7 +55,6 @@ bool ErrorHandle::checkDupFuncDefine(string &lowerName, int &lineNum) {
     bool exist = symbolTable.hasFuncName(lowerName);
     if (exist) {
         printErrorLine('b', lineNum);
-        cerr << "DUP func! lowerName is " << lowerName << " in line of " << lineNum << endl;
     }
     return exist;
 }
@@ -85,7 +85,7 @@ bool ErrorHandle::checkArrayIndexNotInt(SymbolType expType, int &lineNum) {
 }
 
 bool ErrorHandle::checkUndefIdenRefer(string &lowerName, int &lineNum) {
-    bool not_exist = !symbolTable.hasIdenName(lowerName);
+    bool not_exist = !symbolTable.hasIdenNameIncludeGlobal(lowerName);
     if (not_exist) {
         printErrorLine('c', lineNum);
         cerr << "un defined iden! lowerName is " << lowerName << " in line of " << lineNum << endl;
