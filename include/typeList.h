@@ -21,6 +21,14 @@ enum TypeCode {
     IFTK, PLUS, COLON, WRONG, READEOF
 };
 
+enum SymbolAtt {
+    CON, VAR, FUN
+};
+
+enum SymbolType {
+    CHAR, INT, VOID
+};
+
 const map<string, TypeCode> reservedWordMap = {
         {"const",   CONSTTK},
         {"int",     INTTK},

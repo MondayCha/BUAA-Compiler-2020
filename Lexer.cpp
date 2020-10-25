@@ -1,9 +1,6 @@
 //
 // Created by Dlee on 2020/9/22.
 //
-
-#include <fstream>
-#include <cctype>
 #include "include/Lexer.h"
 
 using namespace std;
@@ -11,15 +8,17 @@ using namespace std;
 static char lex_c;
 static char lex_token[LEX_TOKEN_LEN];
 
-Lexer::Lexer(ifstream &inputFile, ofstream &outputFile) : inFile(inputFile), outFile(outputFile) {
+Lexer::Lexer(ErrorHandle &errorHandle, ifstream &inputFile, ofstream &outputFile) : errorHandle(errorHandle),
+                                                                                    inFile(inputFile),
+                                                                                    outFile(outputFile) {
     lex_c = inFile.get();
     lineNum = 1;
     typeCode = WRONG;
     lexToken = {string(), 0};
 }
 
-Lexer &Lexer::getInstance(ifstream &inputFile, ofstream &outputFile) {
-    static Lexer instance(inputFile, outputFile);
+Lexer &Lexer::getInstance(ErrorHandle &errorHandle, ifstream &inputFile, ofstream &outputFile) {
+    static Lexer instance(errorHandle, inputFile, outputFile);
     return instance;
 }
 
@@ -33,9 +32,10 @@ bool Lexer::meetEOF() {
 }
 
 void Lexer::getNextToken() {
-    string strToken = string();
+    lastLineNum = lineNum;
     typeCode = WRONG;
     int pt = 0;
+    bool findError = false;
     // clean space and enter
     while (isspace(lex_c)) {
         if (lex_c == '\n') {
@@ -66,6 +66,7 @@ void Lexer::getNextToken() {
             typeCode = iter->second;
         } else {
             typeCode = IDENFR;  // reserved word
+            lexToken.content_p = lowerToken;
         }
     }
         // int type 001 -100
@@ -84,25 +85,43 @@ void Lexer::getNextToken() {
     else if (lex_c == '\'') {
         lex_c = inFile.get();
         // check if char variable is legal (not yet)
-        strToken = string(1, lex_c);
-        lexToken.contentNum = (unsigned char) lex_c;
-        typeCode = CHARCON;
-        // check if char variable is one byte (not yet)
-        lex_c = inFile.get();
-        lex_c = inFile.get();
+        if (errorHandle.checkIllegalCharReturnNull(lex_c, lineNum, findError)) {
+            lex_c = inFile.get();
+        } else {
+            strToken = string(1, lex_c);
+            lexToken.contentNum = (unsigned char) lex_c;
+            typeCode = CHARCON;
+            // check if char variable is one byte (not yet)
+            lex_c = inFile.get();
+            /*if (lex_c != '\'') {
+                errorHandle.printErrorLine('a', lineNum, findError);
+                do {
+                    strToken = strToken.append(1, lex_c);
+                    lex_c = inFile.get();
+                } while (lex_c != '\'');
+            }*/
+            lex_c = inFile.get();
+        }
     }
         // string <">
     else if (lex_c == '\"') {
         lex_c = inFile.get();
+        // There are no symbols in the string
         if (lex_c == '\"') {
             // empty string
+            strToken = "";
+        } else {
+            do {
+                // 32,33,35-126
+                if (!findError && !((32 <= lex_c && lex_c <= 33) || (35 <= lex_c && lex_c <= 126))){
+                    PRINT_ERR('a')  // illegal symbol appears
+                }
+                lex_token[pt++] = lex_c;
+                lex_c = inFile.get();
+            } while (lex_c != '\"');
+            lex_token[pt] = '\0';
+            strToken = lex_token;
         }
-        do {
-            lex_token[pt++] = lex_c;
-            lex_c = inFile.get();
-        } while (lex_c != '\"');
-        lex_token[pt] = '\0';
-        strToken = lex_token;
         typeCode = STRCON;
         lex_c = inFile.get();
     }
@@ -132,7 +151,6 @@ void Lexer::getNextToken() {
     }
     if (typeCode != WRONG) {
         // outFile << getTypeStr(typeCode) << " " << strToken << endl;
-        analyzerResult = string(getTypeStr(typeCode).append(" ").append(strToken).append("\n"));
-        lexToken.content_p = strToken;
+        analyzerResult = string(getTypeStr(typeCode).append(" ").append(strToken)); // .append("\n")
     }
 }

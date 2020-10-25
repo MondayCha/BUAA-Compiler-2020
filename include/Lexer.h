@@ -9,22 +9,28 @@
 #include <string>
 #include <map>
 #include <fstream>
-#include <ctype.h>
+#include <cctype>
 #include "typeList.h"
+#include "ErrorHandle.h"
 
 #define LEX_TOKEN_LEN 233
 // if use (isalpha(_C) | (_C == '_'))
 // use of a signed integer operand with a binary bitwise operator
 #define isalund(_C) (isalpha(_C) || (_C == '_'))
 
+#define PRINT_ERR(A) errorHandle.printErrorLine(A, lineNum, findError);
+
 using namespace std;
 
 class Lexer {
 private:
-    explicit Lexer(ifstream &inputFile, ofstream &outputFile);   // Singleton Pattern
+    explicit Lexer(ErrorHandle &errorHandle, ifstream &inputFile, ofstream &outputFile);   // Singleton Pattern
+    ErrorHandle &errorHandle;
     ifstream &inFile;               // The copy function is protected, so track back
     ofstream &outFile;
     int lineNum;
+    int lastLineNum;
+    string strToken;
     TypeCode typeCode;
     struct LexToken {
         string content_p;
@@ -35,7 +41,7 @@ private:
     friend class GrammarAnalyzer;
 
 public:
-    static Lexer &getInstance(ifstream &inputFile, ofstream &outputFile);
+    static Lexer &getInstance(ErrorHandle &errorHandle, ifstream &inputFile, ofstream &outputFile);
 
     static string getTypeStr(TypeCode typeCode);
 

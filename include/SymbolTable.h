@@ -8,8 +8,18 @@
 #include <iostream>
 #include <string>
 #include <map>
+#include <vector>
+#include "typeList.h"
 
 using namespace std;
+
+class FuncSym;
+
+class VarSym;
+
+class ConSym;
+
+class Symbol;
 
 class SymbolTable {
 private:
@@ -17,13 +27,89 @@ private:
 
     friend class GrammarAnalyzer;
 
-    map<string, bool> functionType;
+    map<string, FuncSym> globalFuncTable;
+    map<string, Symbol> globalIdenTable;
+    map<string, Symbol> localIdenTable;
 public:
-    void addFunc(const string &name, bool type);
-
-    bool checkFunc(const string &name);
-
     static SymbolTable &getInstance();
+
+    bool hasIdenName(string &name);
+
+    bool hasFuncName(string &name);
+
+    void insertSymbolToLocal(const Symbol &symbol);
+
+    void insertFuncToGlobal(const FuncSym &funcSym);
+
+    void endGlobalIdenSymbol();
+
+    bool isFuncHasReturn(string &name);
+
+    SymbolType convertTypeCode(TypeCode typeCode);
+
+    SymbolType getFuncType(string &lower_name);
+
+    SymbolType getIdenType(string &lower_name);
+
+    SymbolAtt getIdenAtt(string &lower_name);
+
+    vector<VarSym> getFuncParams(string &lower_name);
+};
+
+
+class Symbol {
+private:
+    string name;
+    string lowerName;
+    SymbolAtt symbolAtt;
+    SymbolType symbolType;
+
+    friend class SymbolTable;
+
+    friend class GrammarAnalyzer;
+
+public:
+    Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType);
+};
+
+class VarSym : public Symbol {
+private:
+    int level;
+    int length1;
+    int length2;
+
+    friend class SymbolTable;
+
+    friend class GrammarAnalyzer;
+
+public:
+    VarSym(string &pronName, string &pronLowerName, SymbolType pronType, int plevel, int plength1, int plength2);
+};
+
+class FuncSym : public Symbol {
+private:
+    vector<VarSym> parameters;
+
+    friend class SymbolTable;
+
+    friend class GrammarAnalyzer;
+
+public:
+    FuncSym(string &pronName, string &pronLowerName, SymbolType pronType);
+};
+
+class ConSym : public Symbol {
+private:
+
+
+    int content;
+
+    friend class SymbolTable;
+
+    friend class GrammarAnalyzer;
+
+public:
+    ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent);
 };
 
 #endif //SCANNER_SYMBOLTABLE_H
