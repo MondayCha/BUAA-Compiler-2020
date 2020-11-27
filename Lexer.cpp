@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by Dlee on 2020/9/22.
 //
 #include "include/Lexer.h"
@@ -64,6 +64,7 @@ void Lexer::getNextToken() {
         auto iter = reservedWordMap.find(lowerToken);
         if (iter != reservedWordMap.end()) {
             typeCode = iter->second;
+            lexToken.content_p = lowerToken;
         } else {
             typeCode = IDENFR;  // reserved word
             lexToken.content_p = lowerToken;

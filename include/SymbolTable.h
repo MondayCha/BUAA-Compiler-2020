@@ -27,9 +27,11 @@ private:
 
     friend class GrammarAnalyzer;
 
-    map<string, FuncSym> globalFuncTable;
-    map<string, Symbol> globalIdenTable;
-    map<string, Symbol> localIdenTable;
+    friend class MipsTranslator;
+
+    map<string, FuncSym *> globalFuncTable;
+    map<string, Symbol *> globalIdenTable;
+    map<string, Symbol *> localIdenTable;
 public:
     static SymbolTable &getInstance();
 
@@ -39,15 +41,13 @@ public:
 
     bool hasFuncName(string &name);
 
-    void insertSymbolToLocal(const Symbol &symbol);
+    void insertSymbolToLocal(Symbol *symbol);
 
-    void insertFuncToGlobal(const FuncSym &funcSym);
+    string insertTempSymToLocal(string &tmpName, int pronOffset);
+
+    void insertFuncToGlobal(FuncSym *funcSym);
 
     void endGlobalIdenSymbol();
-
-    void endLocalIdenSymbol();
-
-    bool isFuncHasReturn(string &name);
 
     SymbolType convertTypeCode(TypeCode typeCode);
 
@@ -57,62 +57,49 @@ public:
 
     SymbolAtt getIdenAtt(string &lower_name);
 
+    Symbol *getSymbolPtr(map<string, Symbol *> *searchMap, string &lower_name, bool &isGlobal);
+
     vector<VarSym> getFuncParams(string &lower_name);
+
+    FuncSym *getFuncPtr(string &lower_name);
 };
 
-
 class Symbol {
-private:
+public:
     string name;
     string lowerName;
     SymbolAtt symbolAtt;
     SymbolType symbolType;
 
-    friend class SymbolTable;
-
-    friend class GrammarAnalyzer;
-
-public:
     Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType);
 };
 
 class VarSym : public Symbol {
-private:
+public:
     int level;
     int length1;
     int length2;
+    int offset;
 
-    friend class SymbolTable;
-
-    friend class GrammarAnalyzer;
-
-public:
-    VarSym(string &pronName, string &pronLowerName, SymbolType pronType, int plevel, int plength1, int plength2);
+    VarSym(string &pronName, string &pronLowerName, SymbolType pronType, int plevel, int plength1, int plength2,
+           int pronOffset);
 };
 
 class FuncSym : public Symbol {
-private:
-    vector<VarSym> parameters;
-
-    friend class SymbolTable;
-
-    friend class GrammarAnalyzer;
-
 public:
+    vector<VarSym> parameters;
+    map<string, Symbol *> funcLocalTable;
+    int funcSpace;
+
     FuncSym(string &pronName, string &pronLowerName, SymbolType pronType);
+
+    void setFuncLocalTable(map<string, Symbol *> pronTable);
 };
 
 class ConSym : public Symbol {
-private:
-
-
+public:
     int content;
 
-    friend class SymbolTable;
-
-    friend class GrammarAnalyzer;
-
-public:
     ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent);
 };
 

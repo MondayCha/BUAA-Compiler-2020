@@ -1,22 +1,31 @@
-//
+﻿//
 // Created by Dlee on 2020/10/5.
 //
 
 #include "include/GrammarAnalyzer.h"
+#include <algorithm>
+#include <utility>
 
 SymbolType grammar_func_with_return;
 bool grammar_state_with_return;
+bool grammar_global_declaration;
+int grammar_var_offset;
+// string exp_string;
+FuncSym *grammar_current_function;
 
 GrammarAnalyzer::GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError,
-                                 std::ofstream &pronFile)
-        : lexer(pronLexer), symbolTable(pronSymbol), errorHandle(pronError), outFile(pronFile) {
+                                 IRCodeManager &pronCode, std::ofstream &pronFile)
+        : lexer(pronLexer), symbolTable(pronSymbol), errorHandle(pronError), irCode(pronCode), outFile(pronFile) {
     grammar_func_with_return = VOID;
     grammar_state_with_return = false;
+    grammar_global_declaration = true;
+    grammar_var_offset = 0;
+    grammar_current_function = nullptr;
 }
 
 GrammarAnalyzer &GrammarAnalyzer::getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError,
-                                              std::ofstream &pronOutFile) {
-    static GrammarAnalyzer instance(pronLexer, pronSymbol, pronError, pronOutFile);
+                                              IRCodeManager &pronCode, std::ofstream &pronOutFile) {
+    static GrammarAnalyzer instance(pronLexer, pronSymbol, pronError, pronCode, pronOutFile);
     return instance;
 }
 
@@ -35,15 +44,11 @@ void GrammarAnalyzer::programAnalyzer() {
     if (TYPE_IDEN) {
         varDeclarationAnalyzer();
     } else {
-        symbolTable.endGlobalIdenSymbol();
+        endConstOrVarDeclaration();
     }
-/*    auto iter = symbolTable.globalIdenTable.begin();
-    for(iter; iter != symbolTable.globalIdenTable.end();iter++){
-        cout << "iter is " << iter->second.name << endl;
-        cout << "iter type is " << iter->second.symbolType << endl;
-    }*/
     // {＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞
     functionDeclarationAnalyzer();
+    ADD_MIDCODE(OpExit, "", "", "")
     PRINT_MES(("<程序>"))
 }
 
@@ -143,7 +148,8 @@ void GrammarAnalyzer::intAssignAnalyzer() {
                 content = integerAnalyzer();
             }
             if (!errorHandle.checkDupIdenDefine(lowerName, lexer.lineNum)) {
-                symbolTable.insertSymbolToLocal(*(new ConSym(name, lowerName, INT, content)));
+                symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, INT, content));
+                ADD_MIDCODE(OpConst, INT, lowerName, content)
             }
         }
     }
@@ -170,9 +176,9 @@ void GrammarAnalyzer::charAssignAnalyzer() {
                 // PRINT_G_ERR('o')
                 content = integerAnalyzer();
             }
-            content = characterAnalyzer();
             if (!errorHandle.checkDupIdenDefine(lowerName, lexer.lineNum)) {
-                symbolTable.insertSymbolToLocal(*(new ConSym(name, lowerName, CHAR, content)));
+                symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, CHAR, content));
+                ADD_MIDCODE(OpConst, CHAR, lowerName, content)
             }
         }
     }
@@ -209,7 +215,7 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
         lexer.getNextToken();
         // ＜有返回值函数定义＞
         if (TOKEN_TYPE == LPARENT) {
-            symbolTable.endGlobalIdenSymbol();
+            endConstOrVarDeclaration();
             if (loopTime != 0) {
                 PRINT_MES(("<变量说明>"))
             }
@@ -233,7 +239,7 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
         ++loopTime;
     } while (TYPE_IDEN);
     PRINT_MES("<变量说明>")
-    symbolTable.endGlobalIdenSymbol();
+    endConstOrVarDeclaration();
 }
 
 /*＜变量说明＞  ::= ＜变量定义＞;{＜变量定义＞;}
@@ -266,21 +272,32 @@ void GrammarAnalyzer::varDeclareNoFuncAnalyzer() {
 void GrammarAnalyzer::varDefinitionAnalyzer(string &name, string &lowerName, TypeCode typeCode) {
     // ＜类型标识符＞＜标识符＞=＜常量＞
     // ＜标识符＞['['＜无符号整数＞']'|'['＜无符号整数＞']''['＜无符号整数＞']']
-    int level = 0, length1 = 0, length2 = 0;
+    int level = 0, length1 = 0, length2 = 0, needSpace = 0;
     SymbolType symType = symbolTable.convertTypeCode(typeCode);
     if (TOKEN_TYPE == LBRACK) {
         arrayVarAnalyzer(level, length1, length2);
     }
-    VarSym varSym = *(new VarSym(name, lowerName, symType, level, length1, length2));
-    if (!errorHandle.checkDupIdenDefine(lowerName, LEX_LINE)) {
-        symbolTable.insertSymbolToLocal(varSym);
-        // cout << "symbolTable insert Symbol To Local named " << varSym.name << " type is " << varSym.symbolType << endl;
+    needSpace = getNeedSpace(level, length1, length2);
+    VarSym *var_p = new VarSym(name, lowerName, symType, level, length1, length2, grammar_var_offset);
+    bool var_valid = !errorHandle.checkDupIdenDefine(lowerName, LEX_LINE);
+    if (var_valid) {
+        symbolTable.insertSymbolToLocal(var_p);
+        grammar_var_offset += needSpace;
+        ADD_MIDCODE(OpVar, symType, lowerName, needSpace)
     }
     if (TOKEN_TYPE == ASSIGN) {
         // 变量定义及初始化
         PRINT_GET
         // 初始化
-        varInitAnalyzer(level, length1, length2, (typeCode == INTTK));
+        varInitAnalyzer(lowerName, level, length1, length2, 0, (typeCode == INTTK));
+        //        string exp_string;
+        //        int exp_int;
+        //        SymbolType tmpType = expressionAnalyzer(exp_string, exp_int);
+        //        if (tmpType == CHAR || tmpType == INT) {
+        //            ADD_MIDCODE(OpASSIGN, lowerName, exp_int, "")
+        //        } else {
+        //            ADD_MIDCODE(OpASSIGN, lowerName, exp_string, "")
+        //        }
         PRINT_MES("<变量定义及初始化>")
         return;
     } else if (TOKEN_TYPE == COMMA) {
@@ -298,9 +315,12 @@ void GrammarAnalyzer::varDefinitionAnalyzer(string &name, string &lowerName, Typ
             if (TOKEN_TYPE == LBRACK) {
                 arrayVarAnalyzer(level, length1, length2);
             }
+            needSpace = getNeedSpace(level, length1, length2);
             if (!errorHandle.checkDupIdenDefine(subLowerName, LEX_LINE)) {
                 symbolTable.insertSymbolToLocal(
-                        *(new VarSym(subName, subLowerName, symType, level, length1, length2)));
+                        new VarSym(subName, subLowerName, symType, level, length1, length2, grammar_var_offset));
+                grammar_var_offset += needSpace;
+                ADD_MIDCODE(OpVar, symType, subLowerName, needSpace)
             }
         } while (TOKEN_TYPE == COMMA);
     }
@@ -314,8 +334,10 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     // '('
     CHECK_GET(LPARENT, "speReValFuncDefAnalyzer()");
     // ＜参数表＞
-    FuncSym funcSym = *(new FuncSym(name, lowerName, symbolTable.convertTypeCode(tk)));
-    parameterTableAnalyzer(funcSym, true);
+    SymbolType symbolType = symbolTable.convertTypeCode(tk);
+    auto *funcSym = new FuncSym(name, lowerName, symbolType);
+    ADD_MIDCODE(OpFunc, symbolType, lowerName, "")
+    parameterTableAnalyzer(*funcSym, true);
     // ')'
     if (!errorHandle.checkDupFuncDefine(lowerName, LEX_LINE)) {
         symbolTable.insertFuncToGlobal(funcSym);
@@ -326,7 +348,6 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     CHECK_GET(LBRACE, "speReValFuncDefAnalyzer {");
     //＜复合语句＞
     grammar_func_with_return = symbolTable.convertTypeCode(tk);
-    // cerr << "grammar_func_with_return " << grammar_func_with_return << endl;
     compoundStatementAnalyzer();
     //'}'
     if (!grammar_state_with_return) {
@@ -334,7 +355,9 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     }
     CHECK_GET(RBRACE, "speReValFuncDefAnalyzer }");
     PRINT_MES(("<有返回值函数定义>"))
-    symbolTable.endLocalIdenSymbol();
+    funcSym->setFuncLocalTable(symbolTable.localIdenTable);
+    funcSym->funcSpace = grammar_var_offset > 0 ? grammar_var_offset - 1 : 0;
+    grammar_var_offset = 0;
     grammar_func_with_return = VOID;
     grammar_state_with_return = false;
 }
@@ -371,26 +394,34 @@ void GrammarAnalyzer::arrayVarAnalyzer() {
 }
 
 /*初始化[][] {}{}*/
-void GrammarAnalyzer::varInitAnalyzer(int level, int length1, int length2, bool isInteger) {
+void GrammarAnalyzer::varInitAnalyzer(string &lowerName, int level, int length1, int length2,
+                                      int offset, bool isInteger) {
     if (level == 0) {
         // 不会多一维的
-        constInVarInitAnalyzer_return_error(isInteger);
+        irCode.addThreeAddCode(
+                new ThreeAddCode(OpASSIGN, lowerName, constInVarInitAnalyzer_return_value(isInteger), ""));
     } else if (level == 1) {
         // 一维数组
+        // {
         PRINT_GET
-        for (int i = 0; i < length1 - 1; i++) {
-            constInVarInitAnalyzer_return_error(isInteger);
-            if (TOKEN_TYPE != COMMA) { ;//error
+        int i = 0;
+        for (; i < length1 - 1; i++) {
+            irCode.addThreeAddCode(
+                    new ThreeAddCode(OpAssArray, lowerName, offset + i,
+                                     constInVarInitAnalyzer_return_value(isInteger)));
+            if (TOKEN_TYPE != COMMA) { ; //error
                 // 遇到了提前结束的情况
                 // 如：int a[4] = {0,1}
-                readToRightBrack();
+                readToRightBrack_and_log_error();
                 return;
             }
             PRINT_GET
         }
-        constInVarInitAnalyzer_return_error(isInteger);
-        if (TOKEN_TYPE != RBRACE) { ;//error
-            readToRightBrack();
+        irCode.addThreeAddCode(
+                new ThreeAddCode(OpAssArray, lowerName, offset + i,
+                                 constInVarInitAnalyzer_return_value(isInteger)));
+        if (TOKEN_TYPE != RBRACE) { ; //error
+            readToRightBrack_and_log_error();
             return;
         }
         PRINT_GET
@@ -399,48 +430,50 @@ void GrammarAnalyzer::varInitAnalyzer(int level, int length1, int length2, bool 
         PRINT_GET
         // 读取{}，
         for (int i = 0; i < length1 - 1; i++) {
-            varInitAnalyzer(1, length2, length2, isInteger);
-            if (TOKEN_TYPE != COMMA) { ;//error
-                readToRightBrack();
+            varInitAnalyzer(lowerName, 1, length2, length2, offset, isInteger);
+            if (TOKEN_TYPE != COMMA) { ; //error
+                readToRightBrack_and_log_error();
                 return;
             }
+            offset += length2;
             PRINT_GET
         }
-        varInitAnalyzer(1, length2, length2, isInteger);
+        varInitAnalyzer(lowerName, 1, length2, length2, offset, isInteger);
         if (TOKEN_TYPE == RBRACE) {
             PRINT_GET
             return;
         }
-        while (TOKEN_TYPE != RBRACE) { ;//error
-            if (TOKEN_TYPE == COMMA) {
-                PRINT_GET
-            }
-            varInitAnalyzer(1, length2, length2, isInteger);
+        if (TOKEN_TYPE == COMMA) {
+            PRINT_GET
         }
-        readToRightBrack();
+        readToRightBrack_and_log_error();
     }
 }
 
 /*＜常量＞   ::=  ＜整数＞|＜字符＞*/
-bool GrammarAnalyzer::constInVarInitAnalyzer_return_error(bool isInteger) {
+int GrammarAnalyzer::constInVarInitAnalyzer_return_value(bool isInteger) {
     if (isInteger) {
         if (TOKEN_TYPE == CHARCON) {
             errorHandle.printErrorOfUnMatchConst(LEX_LINE);
+            int returnValue = lexer.lexToken.contentNum;
             PRINT_GET
+            return returnValue;
         } else {
-            integerAnalyzer();
+            return integerAnalyzer();
         }
     } else {
         if (TOKEN_TYPE != CHARCON) {
             //is int
             errorHandle.printErrorOfUnMatchConst(LEX_LINE);
-            integerAnalyzer();
+            return integerAnalyzer();
         } else {
+            int returnValue = lexer.lexToken.contentNum;
             PRINT_GET
+            return returnValue;
         }
     }
     PRINT_MES(("<常量>"))
-    return false;
+    return 0;
 }
 
 SymbolType GrammarAnalyzer::constantAnalyzer() {
@@ -471,11 +504,6 @@ void GrammarAnalyzer::parameterTableAnalyzer(FuncSym &funcSym, bool declaration)
         cout << "pa is " << funcSym.parameters.at(i).name << endl;
     }*/
     PRINT_MES(("<参数表>"))
-    /*if (TOKEN_TYPE == RPARENT) {
-
-    } else {
-        cerr << "error in para";
-    }*/
 }
 
 /*＜类型标识符＞＜标识符＞*/
@@ -488,9 +516,11 @@ void GrammarAnalyzer::paraTableEleAnalyzer(FuncSym &funcSym, bool declaration) {
     if (TOKEN_TYPE != IDENFR) {
         cerr << "paraTableEleAnalyzer()";
     }
-    VarSym varSym = *(new VarSym(LEX_NAME, LEX_LONA, symbolTable.convertTypeCode(tmp_type), 0, 0, 0));
-    funcSym.parameters.push_back(varSym);
-    if (declaration && !errorHandle.checkDupIdenDefine(varSym.lowerName, lexer.lineNum)) {
+    VarSym *varSym = new VarSym(LEX_NAME, LEX_LONA, symbolTable.convertTypeCode(tmp_type), 0, 0, 0,
+                                grammar_var_offset);
+    grammar_var_offset++;
+    funcSym.parameters.push_back(*varSym);
+    if (declaration && !errorHandle.checkDupIdenDefine(varSym->lowerName, lexer.lineNum)) {
         symbolTable.insertSymbolToLocal(varSym);
     }
     PRINT_GET
@@ -514,9 +544,9 @@ void GrammarAnalyzer::compoundStatementAnalyzer() {
 /*＜语句列＞   ::= ｛＜语句＞｝*/
 void GrammarAnalyzer::statementColumnAnalyzer() {
     if (TOKEN_TYPE != RBRACE) {
-        while (TOKEN_TYPE == LBRACE || TOKEN_TYPE == WHILETK || TOKEN_TYPE == FORTK || TOKEN_TYPE == IFTK
-               || TOKEN_TYPE == SWITCHTK || TOKEN_TYPE == IDENFR || TOKEN_TYPE == SCANFTK || TOKEN_TYPE == PRINTFTK
-               || TOKEN_TYPE == RETURNTK || TOKEN_TYPE == SEMICN) {
+        while (TOKEN_TYPE == LBRACE || TOKEN_TYPE == WHILETK || TOKEN_TYPE == FORTK || TOKEN_TYPE == IFTK ||
+               TOKEN_TYPE == SWITCHTK || TOKEN_TYPE == IDENFR || TOKEN_TYPE == SCANFTK || TOKEN_TYPE == PRINTFTK ||
+               TOKEN_TYPE == RETURNTK || TOKEN_TYPE == SEMICN) {
             statementAnalyzer();
         }
     }
@@ -551,13 +581,14 @@ void GrammarAnalyzer::statementAnalyzer() {
         // ＜赋值语句＞;
         if (TOKEN_TYPE == IDENFR) {
             string tmp_lower_name = LEX_LONA;
+            string tmp_name = LEX_NAME;
             PRINT_GET
             if (TOKEN_TYPE == LPARENT) {
                 // 函数调用语句
                 functionCallAnalyzer(tmp_lower_name);
             } else {
                 // 赋值语句
-                assignStatementAnalyzer(tmp_lower_name);
+                assignStatementAnalyzer(tmp_name, tmp_lower_name);
             }
         }
             // ＜读语句＞;
@@ -584,34 +615,48 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
     if (TOKEN_TYPE == WHILETK) {
         PRINT_GET
         CHECK_GET(LPARENT, "whileStatementAnalyzer()");
-        conditionAnalyzer();
-        // CHECK_//GET(RPARENT, "whileStatementAnalyzer()");
-        // while
+        string condition_var, label1, label2;
+        label1 = genLabel();
+        ADD_MIDCODE(OpLabel, label1, "", "")
+        conditionAnalyzer(condition_var);
         CHECK_RPARENT
+        label2 = genLabel();
+        ADD_MIDCODE(OpBEZ, label2, condition_var, "")
         statementAnalyzer();
+        ADD_MIDCODE(OpJmp, label1, "", "")
+        ADD_MIDCODE(OpLabel, label2, "", "")
     } else if (TOKEN_TYPE == FORTK) {
+        string lowerName1, lowerName2, lowerName3;
+        string exp_str, for_var, label1, label2;
+        SymbolType exp_type;
+        int exp_int;
         //for
         PRINT_GET
         //'('
-        CHECK_GET(LPARENT, "forStatementAnalyzer()");
-        //＜标识符＞
+        CHECK_GET(LPARENT, "forStatementAnalyzer (");
+        lowerName1 = LEX_LONA; //＜标识符＞
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
         errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
-        CHECK_GET(IDENFR, "forStatementAnalyzer()");
-        //＝
-        CHECK_GET(ASSIGN, "forStatementAnalyzer()");
+        CHECK_GET(IDENFR, "forStatementAnalyzer ");
+        CHECK_GET(ASSIGN, "forStatementAnalyzer ="); //＝
         //for'('＜标识符＞＝＜表达式＞
-        expressionAnalyzer();
-        //;
-        //CHECK_//GET(SEMICN, "forStatementAnalyzer()");
-        CHECK_SEMICN
-        conditionAnalyzer();
-        //;
-        //CHECK_//GET(SEMICN, "forStatementAnalyzer()");
-        CHECK_SEMICN
+        exp_type = expressionAnalyzer(exp_str, exp_int);
+        if (exp_type == INT) {
+            ADD_MIDCODE(OpASSIGN, lowerName1, exp_int, "")
+        } else {
+            ADD_MIDCODE(OpASSIGN, lowerName1, exp_str, "")
+        }
+        label1 = genLabel();
+        ADD_MIDCODE(OpLabel, label1, "", "")
+        CHECK_SEMICN //;
+        conditionAnalyzer(for_var);
+        label2 = genLabel();
+        ADD_MIDCODE(OpBEZ, label2, for_var, "")
+        CHECK_SEMICN //;
         //＜标识符＞
+        lowerName2 = LEX_LONA;
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
@@ -620,73 +665,167 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         //＝
         CHECK_GET(ASSIGN, "forStatementAnalyzer()");
         //＜标识符＞
+        lowerName3 = LEX_LONA;
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
+        int stepSize;
+        bool isPlus = true;
         //(+|-)
         if (TYPE_ADDE) {
+            if (TOKEN_TYPE == MINU) {
+                isPlus = false;
+            }
             PRINT_GET
-        } else {
-            cerr << "for";
         }
         //＜步长＞
-        unsignedIntAnalyzer();
+        stepSize = unsignedIntAnalyzer();
         PRINT_MES(("<步长>"))
-        // ')'
-        // CHECK_//GET(RPARENT, "forStatementAnalyzer()");
-        // FOR
         CHECK_RPARENT
         // ＜语句＞
         statementAnalyzer();
+        ADD_MIDCODE(isPlus ? OpPLUS : OpMINU, lowerName2, lowerName3, stepSize)
+        ADD_MIDCODE(OpJmp, label1, "", "")
+        ADD_MIDCODE(OpLabel, label2, "", "")
     }
     PRINT_MES(("<循环语句>"))
 }
 
 /*＜条件＞::=  ＜表达式＞＜关系运算符＞＜表达式＞*/
-void GrammarAnalyzer::conditionAnalyzer() {
+void GrammarAnalyzer::conditionAnalyzer(string &condition_var) {
     // 条件判断的左右表达式只能为整型
-    if (expressionAnalyzer() != INT) {
+    string exp1_str, exp2_str;
+    int exp1_int, exp2_int;
+    SymbolType exp1_type, exp2_type;
+    exp1_type = expressionAnalyzer(exp1_str, exp1_int);
+    if (exp1_type != INT && exp1_type != INTVAR) {
         PRINT_G_ERR('f');
     }
     /*＜关系运算符＞  ::=  <｜<=｜>｜>=｜!=｜==*/
-    if (TOKEN_TYPE == LSS || TOKEN_TYPE == LEQ || TOKEN_TYPE == GRE ||
-        TOKEN_TYPE == GEQ || TOKEN_TYPE == EQL || TOKEN_TYPE == NEQ) {
-        PRINT_GET
+    OperatorType opType;
+    if (TOKEN_TYPE == LSS) {
+        opType = OpLSS;
+    } else if (TOKEN_TYPE == LEQ) {
+        opType = OpLEQ;
+    } else if (TOKEN_TYPE == GRE) {
+        opType = OpGRE;
+    } else if (TOKEN_TYPE == GEQ) {
+        opType = OpGEQ;
+    } else if (TOKEN_TYPE == EQL) {
+        opType = OpEQL;
+    } else if (TOKEN_TYPE == NEQ) {
+        opType = OpNEQ;
     } else {
         cerr << "relationalOperatorAnalyzer()";
     }
-    if (expressionAnalyzer() != INT) {
+    PRINT_GET
+    exp2_type = expressionAnalyzer(exp2_str, exp2_int);
+    if (exp2_type != INT && exp2_type != INTVAR) {
         PRINT_G_ERR('f');
+    }
+    condition_var = genTmpVar_and_insert();
+    if (exp1_type == INT && exp2_type == INT) {
+        ADD_MIDCODE(opType, condition_var, exp1_int, exp2_int)
+    } else if (exp1_type != INT && exp2_type == INT) {
+        ADD_MIDCODE(opType, condition_var, exp1_str, exp2_int)
+    } else if (exp1_type == INT && exp2_type != INT) {
+        ADD_MIDCODE(opType, condition_var, exp1_int, exp2_str)
+    } else {
+        ADD_MIDCODE(opType, condition_var, exp1_str, exp2_str)
     }
     PRINT_MES(("<条件>"))
 }
 
 /*＜表达式＞    ::= ［＋｜－］＜项＞{＜加法运算符＞＜项＞}*/
 SymbolType GrammarAnalyzer::expressionAnalyzer() {
+    string exp_str;
+    return expressionAnalyzer(exp_str);
+}
+
+SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str) {
+    int exp_int;
+    SymbolType ans = expressionAnalyzer(exp_str, exp_int);
+    if (ans == INTVAR) {
+        return INT;
+    } else if (ans == CHARVAR) {
+        return CHAR;
+    } else {
+        return ans;
+    }
+}
+
+// 返回CHAR: 单个char类型常量
+// 返回CHARVAR: 单个char类型变量
+// 返回INT: 单个int类型常量
+// 返回INTVAR: 复合个int类型/变量
+// 返回VOID: 空
+SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
     SymbolType returnValue = VOID;
     bool calculate = false;
+    bool isMinus = false;
     if (TYPE_ADDE) {
+        isMinus = (TOKEN_TYPE == MINU);
         PRINT_GET
         calculate = true;
     }
-    returnValue = itemAnalyzer();
+    string ans, op1, op2;
+    returnValue = itemAnalyzer(op1, exp_int);
+    bool op1isInt = (returnValue == CHAR || returnValue == INT);
+    int op1Int = exp_int;
+    if (calculate && isMinus) {
+        if (op1isInt) {
+            STORE_EXP(OpMINU, 0, exp_int)
+        } else {
+            STORE_EXP(OpMINU, 0, op1)
+        }
+    }
     while (TYPE_ADDE) {
+        isMinus = (TOKEN_TYPE == MINU);
         PRINT_GET
-        itemAnalyzer();
         calculate = true;
+        SymbolType tmpType = itemAnalyzer(op2, exp_int);
+        bool op2isInt = (tmpType == CHAR || tmpType == INT);
+        if (op1isInt && op2isInt) {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, exp_int)
+        } else if (op1isInt && !op2isInt) {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, op2)
+        } else if (!op1isInt && op2isInt) {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, exp_int)
+        } else {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, op2)
+        }
     }
+    exp_str = op1;
     PRINT_MES(("<表达式>"))
-    return calculate ? INT : returnValue;
+    return calculate ? INTVAR : returnValue;
 }
 
 /*＜项＞     ::= ＜因子＞{＜乘法运算符＞＜因子＞}*/
-SymbolType GrammarAnalyzer::itemAnalyzer() {
-    SymbolType returnValue = factorAnalyzer();
+SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
+    string ans, op1, op2;
+    bool isMult = false;
+    // ＜因子＞
+    SymbolType returnValue = factorAnalyzer(op1, exp_int);
+    bool op1isInt = (returnValue == CHAR || returnValue == INT);
+    int op1Int = exp_int;
+    // {＜乘法运算符＞＜因子＞}
     while (TOKEN_TYPE == MULT || TOKEN_TYPE == DIV) {
+        isMult = (TOKEN_TYPE == MULT);
         PRINT_GET
-        factorAnalyzer();
-        returnValue = INT;
+        returnValue = INTVAR;
+        SymbolType tmpType = factorAnalyzer(op2, exp_int);
+        bool op2isInt = (tmpType == CHAR || tmpType == INT);
+        if (op1isInt && op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, exp_int)
+        } else if (op1isInt && !op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, op2)
+        } else if (!op1isInt && op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1, exp_int)
+        } else {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1, op2)
+        }
     }
+    exp_str = op1;
     PRINT_MES(("<项>"))
     return returnValue;
 }
@@ -699,15 +838,15 @@ SymbolType GrammarAnalyzer::itemAnalyzer() {
  * ＜整数＞|
  * ＜字符＞｜
  * ＜有返回值函数调用语句＞*/
-SymbolType GrammarAnalyzer::factorAnalyzer() {
+SymbolType GrammarAnalyzer::factorAnalyzer(string &exp_str, int &exp_int) {
     SymbolType returnValue = VOID;
     if (TOKEN_TYPE == LPARENT) {
         // '('＜表达式＞')'
         PRINT_GET
-        expressionAnalyzer();
+        SymbolType sy = expressionAnalyzer(exp_str, exp_int);
         CHECK_RPARENT
         // 字符型一旦参与运算则转换成整型，包括小括号括起来的字符型，也算参与了运算，例如(‘c’)的结果是整型
-        returnValue = INT;
+        returnValue = (sy == CHAR) ? INTVAR : sy;
     } else if (TOKEN_TYPE == IDENFR) {
         string lower_name = LEX_LONA;
         PRINT_GET
@@ -715,20 +854,31 @@ SymbolType GrammarAnalyzer::factorAnalyzer() {
             // ＜标识符＞'['＜表达式＞']''['＜表达式＞']'
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
             returnValue = symbolTable.getIdenType(lower_name);
-            arrayExpAssignAnalyzer();
+            // 下次处理
+            exp_str = arrayExpAssignAnalyzer(lower_name);
         } else if (TOKEN_TYPE == LPARENT) {
             // ＜有返回值函数调用语句＞
+            // 下次处理
             returnValue = functionCallAnalyzer(lower_name);
         } else {
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
             returnValue = symbolTable.getIdenType(lower_name);
+            exp_str = LEX_LONA;
+        }
+        if (returnValue == INT) {
+            returnValue = INTVAR;
+        } else if (returnValue == CHAR) {
+            returnValue = CHARVAR;
         }
     } else if (TOKEN_TYPE == CHARCON) {
+        exp_int = lexer.lexToken.contentNum;
+        exp_str = to_string(exp_int);
         PRINT_GET
         returnValue = CHAR;
     } else {
         bool isInteger = false;
-        integerAnalyzer(isInteger);
+        exp_int = integerAnalyzer(isInteger);
+        exp_str = to_string(exp_int);
         if (isInteger) {
             returnValue = INT;
         }
@@ -740,47 +890,155 @@ SymbolType GrammarAnalyzer::factorAnalyzer() {
 
 /*＜条件语句＞  ::= if '('＜条件＞')'＜语句＞［else＜语句＞］*/
 void GrammarAnalyzer::conditionalStatementAnalyzer() {
+    // if '('＜条件＞')'
+    string condition_var;
     CHECK_GET(IFTK, "if");
     CHECK_GET(LPARENT, "(");
-    conditionAnalyzer();
-    //CHECK_//GET(RPARENT, ")");
-    // if
+    conditionAnalyzer(condition_var);
     CHECK_RPARENT
+    string label_if_else, label_if_end;
+    label_if_else = genLabel();
+    ADD_MIDCODE(OpBEZ, label_if_else, condition_var, "")
     statementAnalyzer();
     if (TOKEN_TYPE == ELSETK) {
         PRINT_GET
+        label_if_end = genLabel();
+        ADD_MIDCODE(OpJmp, label_if_end, "", "")
+        ADD_MIDCODE(OpLabel, label_if_else, "", "")
         statementAnalyzer();
+        ADD_MIDCODE(OpLabel, label_if_end, "", "")
+    } else {
+        ADD_MIDCODE(OpLabel, label_if_else, "", "")
     }
     PRINT_MES(("<条件语句>"))
 }
 
-void GrammarAnalyzer::arrayExpAssignAnalyzer() {
+string GrammarAnalyzer::arrayExpAssignAnalyzer(string &lower_name) {
+    string x;
+    int y;
+    return arrayExpAssignAnalyzer(lower_name, true, x, y);
+}
+
+string GrammarAnalyzer::arrayExpAssignAnalyzer(string &lower_name, bool genTmp, string &index_s, int &index) {
     // 数组元素的下标只能是整型表达式
     // 数组元素的下标不能是字符型
     CHECK_GET(LBRACK, "ASSIGN");
-    errorHandle.checkArrayIndexNotInt(expressionAnalyzer(), LEX_LINE);
+    string str_len1, str_len2;
+    int exp_int1, exp_int2;
+    int level = 1;
+    SymbolType t1, t2;
+    t1 = expressionAnalyzer(str_len1, exp_int1);
+    errorHandle.checkArrayIndexNotInt(t1, LEX_LINE);
     CHECK_RBRACK
     if (TOKEN_TYPE == LBRACK) {
         PRINT_GET
-        errorHandle.checkArrayIndexNotInt(expressionAnalyzer(), LEX_LINE);
+        level = 2;
+        t2 = expressionAnalyzer(str_len2, exp_int2);
+        errorHandle.checkArrayIndexNotInt(t2, LEX_LINE);
         CHECK_RBRACK
+    }
+    if (level == 1) {
+        // 一维数组
+        string ans;
+        if (t1 == INT) {
+            if (genTmp) {
+                ans = genTmpVar_and_insert();
+                ADD_MIDCODE(OpGetArray, ans, lower_name, exp_int1)
+            }
+            index = exp_int1;
+        } else {
+            if (genTmp) {
+                ans = genTmpVar_and_insert();
+                ADD_MIDCODE(OpGetArray, ans, lower_name, str_len1)
+            }
+            index = -1;
+            index_s = str_len1;
+        }
+        return ans;
+    } else {
+        bool isGlobal;
+        auto *var_p = (VarSym *) symbolTable.getSymbolPtr(&(symbolTable.localIdenTable), lower_name, isGlobal);
+        if (var_p == nullptr) {
+            return nullptr;
+        }
+        int off;
+        string ans, tmp1, tmp2;
+        if (t1 == INT && t2 == INT) {
+            ans = genTmpVar_and_insert();
+            off = exp_int1 * var_p->length2 + exp_int2;
+            if (genTmp) {
+                ADD_MIDCODE(OpGetArray, ans, lower_name, off)
+            }
+            index = off;
+        } else {
+            index = -1;
+            if (t1 != INT && t2 != INT) {
+                tmp1 = genTmpVar_and_insert();
+                tmp2 = genTmpVar_and_insert();
+                ans = genTmpVar_and_insert();
+                ADD_MIDCODE(OpMULT, tmp1, str_len1, var_p->length2)
+                ADD_MIDCODE(OpPLUS, tmp2, tmp1, str_len2)
+            } else if (t1 != INT && t2 == INT) {
+                tmp1 = genTmpVar_and_insert();
+                tmp2 = genTmpVar_and_insert();
+                ans = genTmpVar_and_insert();
+                ADD_MIDCODE(OpMULT, tmp1, str_len1, var_p->length2)
+                ADD_MIDCODE(OpPLUS, tmp2, tmp1, exp_int2)
+            } else {
+                tmp2 = genTmpVar_and_insert();
+                ans = genTmpVar_and_insert();
+                ADD_MIDCODE(OpPLUS, tmp2, str_len2, (exp_int1 * var_p->length2))
+            }
+            if (genTmp) {
+                ADD_MIDCODE(OpGetArray, ans, lower_name, tmp2)
+            }
+            index_s = move(tmp2);
+        }
+        return ans;
     }
 }
 
 /*＜赋值语句＞   ::=  ＜标识符＞＝＜表达式＞|
  * ＜标识符＞'['＜表达式＞']'=＜表达式＞|
  * ＜标识符＞'['＜表达式＞']''['＜表达式＞']' =＜表达式＞*/
-void GrammarAnalyzer::assignStatementAnalyzer(string &lower_name) {
+void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) {
     //标识符已读
     // 未定义的名字
     errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
     // 不能改变常量的值
     errorHandle.checkChangeConstIden(lower_name, LEX_LINE);
+    bool isArray = false;
+    string array_index_s;
+    int array_index;
     if (TOKEN_TYPE == LBRACK) {
-        arrayExpAssignAnalyzer();
+        isArray = true;
+        arrayExpAssignAnalyzer(lower_name, false, array_index_s, array_index);
     }
     CHECK_GET(ASSIGN, "ASSIGN =");
-    expressionAnalyzer();
+    string exp_string;
+    int exp_int;
+    SymbolType tType = expressionAnalyzer(exp_string, exp_int);
+    if (tType == CHAR || tType == INT) {
+        if (isArray) {
+            if (array_index < 0) {
+                ADD_MIDCODE(OpAssArray, lower_name, array_index_s, exp_int)
+            } else {
+                ADD_MIDCODE(OpAssArray, lower_name, array_index, exp_int)
+            }
+        } else {
+            ADD_MIDCODE(OpASSIGN, lower_name, exp_int, "")
+        }
+    } else {
+        if (isArray) {
+            if (array_index < 0) {
+                ADD_MIDCODE(OpAssArray, lower_name, array_index_s, exp_string)
+            } else {
+                ADD_MIDCODE(OpAssArray, lower_name, array_index, exp_string)
+            }
+        } else {
+            ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
+        }
+    }
     PRINT_MES(("<赋值语句>"))
 }
 
@@ -819,8 +1077,8 @@ void GrammarAnalyzer::readStatementAnalyzer() {
     errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
     // 不能改变常量的值
     errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
-    CHECK_GET(IDENFR, "identity");
-    //CHECK_//GET(RPARENT, "SC)");
+    ADD_MIDCODE(OpScanf, LEX_LONA, "", "")
+    PRINT_GET
     CHECK_RPARENT
     PRINT_MES(("<读语句>"))
 }
@@ -834,16 +1092,22 @@ void GrammarAnalyzer::writeStatementAnalyzer() {
     CHECK_GET(LPARENT, "(");
     // ＜字符串＞
     if (TOKEN_TYPE == STRCON) {
-        stringAnalyzer();
+        string strName = stringAnalyzer();
+        ADD_MIDCODE(OpPrint, VOID, strName, "")
         if (TOKEN_TYPE == COMMA) {
             PRINT_GET
-            expressionAnalyzer();
+            string tmpValue;
+            SymbolType tmpSymType = expressionAnalyzer(tmpValue);
+            ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
         }
     } else {
-        expressionAnalyzer();
+        string tmpValue;
+        SymbolType tmpSymType = expressionAnalyzer(tmpValue);
+        ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
     }
     //CHECK_//GET(RPARENT, ")");
     CHECK_RPARENT
+    ADD_MIDCODE(OpPrint, VOID, "nLine", "")
     PRINT_MES(("<写语句>"))
 }
 
@@ -856,6 +1120,9 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
             // ＜无返回值函数定义＞＜主函数＞
             PRINT_GET
             if (TOKEN_TYPE == MAINTK) {
+                auto *funcSym = new FuncSym(LEX_NAME, LEX_LONA, MAIN);
+                symbolTable.insertFuncToGlobal(funcSym);
+                ADD_MIDCODE(OpFunc, VOID, LEX_LONA, "")
                 // ＜主函数＞
                 PRINT_GET
                 CHECK_GET(LPARENT, "( main");
@@ -865,18 +1132,21 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
                 CHECK_GET(LBRACE, "{ main");
                 compoundStatementAnalyzer();
                 CHECK_GET(RBRACE, "} main");
-                symbolTable.endLocalIdenSymbol();
+                funcSym->setFuncLocalTable(symbolTable.localIdenTable);
+                funcSym->funcSpace = grammar_var_offset > 0 ? grammar_var_offset - 1 : 0;
+                grammar_var_offset = 0;
                 PRINT_MES(("<主函数>"))
                 return;
             } else {
                 // ＜无返回值函数定义＞  ::= void＜标识符＞
-                FuncSym funcSym = *(new FuncSym(lexer.strToken, lexer.lexToken.content_p, VOID));
+                auto *funcSym = new FuncSym(lexer.strToken, lexer.lexToken.content_p, VOID);
+                ADD_MIDCODE(OpFunc, VOID, lexer.lexToken.content_p, "")
                 PRINT_GET
                 // '('＜参数表＞')''{'＜复合语句＞'}'
                 CHECK_GET(LPARENT, "( main");
-                parameterTableAnalyzer(funcSym, true);
+                parameterTableAnalyzer(*funcSym, true);
                 //CHECK_//GET(RPARENT, ") main");
-                if (!errorHandle.checkDupFuncDefine(funcSym.lowerName, LEX_LINE)) {
+                if (!errorHandle.checkDupFuncDefine(funcSym->lowerName, LEX_LINE)) {
                     symbolTable.insertFuncToGlobal(funcSym);
                 }
                 // 无参数函数定义
@@ -884,7 +1154,9 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
                 CHECK_GET(LBRACE, "{ main");
                 compoundStatementAnalyzer();
                 CHECK_GET(RBRACE, "} main");
-                symbolTable.endLocalIdenSymbol();
+                funcSym->setFuncLocalTable(symbolTable.localIdenTable);
+                funcSym->funcSpace = grammar_var_offset > 0 ? grammar_var_offset - 1 : 0;
+                grammar_var_offset = 0;
                 PRINT_MES(("<无返回值函数定义>"))
             }
         } else if (TYPE_IDEN) {
@@ -964,9 +1236,15 @@ void GrammarAnalyzer::valParaTableAnalyzer(vector<VarSym> &vectorVar) {
 }
 
 /*＜字符串＞   ::=  "｛十进制编码为32,33,35-126的ASCII字符｝"*/
-void GrammarAnalyzer::stringAnalyzer() {
-    CHECK_GET(STRCON, "str con");
+string GrammarAnalyzer::stringAnalyzer() {
+    static int labelIndex = -1;
+    stringData tmpStringData;
+    tmpStringData.label = "str_" + to_string(++labelIndex);
+    tmpStringData.content = move(lexer.strToken);
+    irCode.addStringData(tmpStringData);
+    PRINT_GET
     PRINT_MES(("<字符串>"))
+    return tmpStringData.label;
 }
 
 /*＜情况语句＞  ::=  switch ‘(’＜表达式＞‘)’ ‘{’＜情况表＞＜缺省＞‘}’*/
@@ -1014,16 +1292,55 @@ bool GrammarAnalyzer::defaultSwitchAnalyzer() {
     return false;
 }
 
-void GrammarAnalyzer::readToRightBrack() {
+void GrammarAnalyzer::readToRightBrack_and_log_error() {
     // 数组初始化个数不匹配
     PRINT_G_ERR('n')
     while (TOKEN_TYPE != RBRACE) {
+        if (TOKEN_TYPE == LBRACE) {
+            while (TOKEN_TYPE != RBRACE) {
+                PRINT_GET
+            }
+        }
         PRINT_GET
     }
     PRINT_GET
 }
 
+void GrammarAnalyzer::endConstOrVarDeclaration() {
+    symbolTable.endGlobalIdenSymbol();
+    grammar_global_declaration = false;
+    grammar_var_offset = 0;
+    ADD_MIDCODE(OpJMain, "", "", "")
+}
 
+int GrammarAnalyzer::getNeedSpace(int level, int length1, int length2) {
+    int need;
+    switch (level) {
+        case 0:
+            need = 1;
+            break;
+        case 1:
+            need = length1;
+            break;
+        case 2:
+            need = length1 * length2;
+            break;
+        default:;
+    }
+    return need;
+}
 
+string GrammarAnalyzer::genTmpVar_and_insert() {
+    static int index = -1;
+    string ans = "tmp_" + to_string(++index);
+    ans = symbolTable.insertTempSymToLocal(ans, grammar_var_offset);
+    grammar_var_offset++;
+    cout << "/////////////////// gen tmp named " << ans << endl;
+    return ans;
+}
 
-
+string GrammarAnalyzer::genLabel() {
+    static int label_index = -1;
+    string ans = "label_" + to_string(++label_index);
+    return ans;
+}

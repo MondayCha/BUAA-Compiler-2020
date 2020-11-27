@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by Dlee on 2020/9/22.
 //
 
@@ -6,8 +6,84 @@
 #ifndef SCANNER_TYPELIST_H
 #define SCANNER_TYPELIST_H
 
+#include <iostream>
+#include <string>
+#include <map>
+
 using namespace std;
 
+/////////////////////////////////////////////////
+////////////////      IRCode    /////////////////
+enum OperatorType {
+    OpPLUS,
+    OpMINU,
+    OpMULT,
+    OpDIV,
+    OpASSIGN,
+    OpScanf,
+    OpPrint,
+    OpConst,
+    OpVar,
+    OpFunc,
+    OpJMain,
+    OpExit,
+    // 2020.11.24
+    OpAssArray,
+    OpGetArray,
+    // 2020.11.26
+    OpLSS,
+    OpLEQ,
+    OpGRE,
+    OpGEQ,
+    OpEQL,
+    OpNEQ,
+    OpBEZ,
+    OpBNEZ,
+    OpJmp,
+    OpLabel,
+};
+
+const char *const operatorString[] = {
+        "PLUS  ",
+        "MINU  ",
+        "MULT  ",
+        "DIV   ",
+        "ASSIGN",
+        "Scanf ",
+        "Print ",
+        "ConDef",
+        "VarDef",
+        "FunDef",
+        "JMain ",
+        "Exit  ",
+        "AssArr",
+        "GetArr",
+        "cd LSS",
+        "cd LEQ",
+        "cd GRE",
+        "cd GEQ",
+        "cd EQL",
+        "cd NEQ",
+        "bez   ",
+        "bnez  ",
+        "Jmp to",
+        "Label:",
+};
+
+/////////////////////////////////////////////////
+////////////////   SymbolTable  /////////////////
+enum SymbolAtt {
+    CON, VAR, FUN
+};
+
+enum SymbolType {
+    CHAR, INT, VOID,
+    MAIN,
+    CHARVAR, INTVAR,
+};
+
+/////////////////////////////////////////////////
+////////////////     Lexer     //////////////////
 enum TypeCode {
     IDENFR, ELSETK, MINU, ASSIGN,
     INTCON, SWITCHTK, MULT, SEMICN,
@@ -19,14 +95,6 @@ enum TypeCode {
     VOIDTK, PRINTFTK, EQL, LBRACE,
     MAINTK, RETURNTK, NEQ, RBRACE,
     IFTK, PLUS, COLON, WRONG, READEOF
-};
-
-enum SymbolAtt {
-    CON, VAR, FUN
-};
-
-enum SymbolType {
-    CHAR, INT, VOID
 };
 
 const map<string, TypeCode> reservedWordMap = {

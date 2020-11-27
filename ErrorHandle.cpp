@@ -77,7 +77,7 @@ bool ErrorHandle::checkUndefFuncCall(string &lowerName, int &lineNum) {
 }
 
 bool ErrorHandle::checkArrayIndexNotInt(SymbolType expType, int &lineNum) {
-    if (expType != INT) {
+    if (expType != INT && expType != INTVAR) {
         printErrorLine('i', lineNum);
         return true;
     }

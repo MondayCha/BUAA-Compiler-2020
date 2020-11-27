@@ -6,10 +6,13 @@
 #define SCANNER_GRAMMARANALYZER_H
 
 #include "Lexer.h"
+#include "typeList.h"
 #include "SymbolTable.h"
 #include "ErrorHandle.h"
+#include "IRCodeManager.h"
 
-#define CLOSE_GRAMMER_OUTPUT
+
+//#define CLOSE_GRAMMER_OUTPUT
 
 #define GET_TOKEN lexer.getNextToken()
 
@@ -46,6 +49,12 @@ PRINT_GET\
 } else {\
 PRINT_G_SEM\
 }
+
+#define STORE_EXP(opType, obj1, obj2) \
+ans = genTmpVar_and_insert();           \
+irCode.addThreeAddCode(new ThreeAddCode(opType, ans, obj1, obj2));\
+op1 = move(ans);
+
 #define LEX_LINE lexer.lineNum
 #define LEX_NAME lexer.strToken
 #define LEX_LONA lexer.lexToken.content_p
@@ -53,21 +62,24 @@ PRINT_G_SEM\
 #define TOKEN_TYPE lexer.typeCode
 #define PRINT_G_ERR(A) errorHandle.printErrorLine(A, lexer.lineNum);
 #define PRINT_G_SEM errorHandle.printErrorLine('k', lexer.lastLineNum);
+#define ADD_MIDCODE(op,s1,s2,s3) irCode.addThreeAddCode(new ThreeAddCode(op, s1, s2, s3));
 
 class GrammarAnalyzer {
 private:
-    explicit GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError,
+    explicit GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError, IRCodeManager &pronCode,
                              std::ofstream &pronFile);
 
     Lexer &lexer;
     SymbolTable &symbolTable;
     ErrorHandle &errorHandle;
+    IRCodeManager &irCode;
     ofstream &outFile;
     ///////// analyze grammar //////////
 
 public:
     static GrammarAnalyzer &
-    getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError, std::ofstream &pronOutFile);
+    getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError, IRCodeManager &pronCode,
+                std::ofstream &pronOutFile);
 
     void analyzeGrammar();
 
@@ -99,9 +111,9 @@ public:
 
     void arrayVarAnalyzer();
 
-    void varInitAnalyzer(int level, int length1, int length2, bool isInteger);
+    void varInitAnalyzer(string &lowerName, int level, int length1, int length2, int offset, bool isInteger);
 
-    bool constInVarInitAnalyzer_return_error(bool isInteger);
+    int constInVarInitAnalyzer_return_value(bool isInteger);
 
     void parameterTableAnalyzer(FuncSym &funcSym, bool declaration);
 
@@ -117,19 +129,21 @@ public:
 
     void loopStatementAnalyzer();
 
-    void conditionAnalyzer();
+    void conditionAnalyzer(string &condition_var);
 
-    SymbolType expressionAnalyzer();
+    SymbolType expressionAnalyzer(string &exp_str, int &exp_int);
 
-    SymbolType itemAnalyzer();
+    SymbolType itemAnalyzer(string &exp_str, int &exp_int);
+
+    SymbolType factorAnalyzer(string &exp_str, int &exp_int);
+
+    string genTmpVar_and_insert();
 
     void conditionalStatementAnalyzer();
 
-    void arrayExpAssignAnalyzer();
+    string arrayExpAssignAnalyzer(string &lower_name, bool genTmp, string &index_s, int &index);
 
-    void assignStatementAnalyzer(string &lower_name);
-
-    SymbolType factorAnalyzer();
+    void assignStatementAnalyzer(string &name, string &lower_name);
 
     void returnStatementAnalyzer();
 
@@ -143,7 +157,7 @@ public:
 
     void valParaTableAnalyzer(vector<VarSym> &vectorVar);
 
-    void stringAnalyzer();
+    string stringAnalyzer();
 
     void switchStatementAnalyzer();
 
@@ -153,8 +167,19 @@ public:
 
     bool defaultSwitchAnalyzer();
 
-    void readToRightBrack();
-};
+    void readToRightBrack_and_log_error();
 
+    void endConstOrVarDeclaration();
+
+    static int getNeedSpace(int level, int length1, int length2);
+
+    SymbolType expressionAnalyzer(string &exp_str);
+
+    SymbolType expressionAnalyzer();
+
+    string arrayExpAssignAnalyzer(string &lower_name);
+
+    string genLabel();
+};
 
 #endif //SCANNER_GRAMMARANALYZER_H

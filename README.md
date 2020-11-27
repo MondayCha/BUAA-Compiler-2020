@@ -1,133 +1,153 @@
-# 2020语法分析阶段设计文档
-
-<p align="right">18373580 李亦龙</p>
-[TOC]
+# 2020错误处理阶段设计文档
 
 ## 1. 需求分析
 
 ### 1.1 问题描述
 
-请根据给定的文法设计并实现语法分析程序，能基于上次作业的词法分析程序所识别出的单词，识别出各类语法成分。输入输出及处理要求如下：
+请根据给定的文法设计并实现错误处理程序，能诊察出常见的语法和语义错误，进行错误局部化处理，并输出错误信息。
 
-1. 需按文法规则，用递归子程序法对文法中定义的所有种语法成分进行分析；**（所用方法：递归子程序法，可以在课本中找到进一步的案例）**
-
-2. 为了方便进行自动评测，输入的被编译源文件统一命名为testfile.txt（注意不要写错文件名）；输出的结果文件统一命名为output.txt（注意不要写错文件名）；结果文件中包含如下两种信息：
-
-   - 按词法分析识别单词的顺序，按行输出每个单词的信息（要求同词法分析作业，对于预读的情况不能输出）。**（如何处理预读？保证输出顺序正确？不能简单在词法分析中输出上一次的结果了）**
-
-   - 在文法中高亮显示（见2020文法定义）的语法分析成分分析结束前，另起一行输出当前语法成分的名字，形如“<常量说明>”（注：未要求输出的语法成分仍需要分析）**（注意点：需要输出中文，而Windows命令行默认使用GBK编码，可能存在问题）**
-
-### 1.2 输入形式
-
-testfile.txt中的符合文法要求的测试程序。
-
-### 1.3 输出形式
-
-按如上要求将语法分析结果输出至output.txt中，中文字符的编码格式要求是UTF-8。
-
-### 1.4 特别提醒
-
-1. 本次作业只考核对正确程序的处理，但需要为今后可能出现的错误情况预留接口。**（错误处理需要在下一次的作业实现，我感觉这个我可能会写很久……）**
-
-2. 当前要求的输出只是为了便于评测，完成编译器中无需出现这些信息，请设计为方便打开/关闭这些输出的方案。**（我的处理方式：用宏语句包裹输出语句，方便之后关闭）**
+- **诊察出常见的语法和语义错误**：按照题目所给的错误类型设计对应的处理程序
+- **错误局部化处理**：如何最小化错误的影响？如何提升性能？
 
 
 
 ## 2. 初步思路
 
-在编码之前，我是这样规划我的语法分析部分设计的：
-
-1. 使用一遍过的方式，将词法分析读一个词的操作封装成一个方法，在语法分析程序中调用这个方法，就可以读取到下一个Token。
-
-2. 修改文法。可以注意到这次的文法较为复杂，存在需要回溯或者预读的情况。为此我的初步解决方案是修改文法，使得不同产生式之间没有交集。但这种做法的一大问题便在于错误处理——我使用了很多条件语句对输入进行细分，而这在遇到非标准输入时就很可能引发未知的问题。
-
-3. 调整输出。在上一次的词法分析中，每当识别出一个Token，就会将其输出到output文件上，但这次的语法分析器就不能这样做，一个典型的例子就是：
-
-   ```c
-   ＜程序＞::= ［＜常量说明＞］［＜变量说明＞］{＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞
-   ＜变量说明＞  ::= ＜变量定义＞;{＜变量定义＞;}
-   ＜有返回值函数定义＞  ::=  ＜声明头部＞'('＜参数表＞')' '{'＜复合语句＞'}'
-   ```
-   在这里变量说明和有返回值函数定义有着相同的声明头部（int 和char），在识别到函数的"("之前是无法判断变量说明是否已经结束的。所以这里我选择了在读取变量定义时如果发现是函数定义，就进行输出顺序的调整。
-
-6. 在这次的作业中虽然不要求符号表，但是需要为函数建立一个简单的属性表，从而正确识别出有返回值和无返回值函数调用语句。
+- **关于文法**：在语法分析中，我对文法进行了修改，使得不同产生式之间没有交集。因此错误处理只需要在对应的递归调用子程序中增加判断条件就可以了。
+- **表达式类型**：表达式有char和int两种类型，因此我将表达式、项、因子的返回值都设置为对应的类型，一旦某个char类型参与了运算就转换为int，为空时则返回void，与符号表管理所用的枚举类一致。
+- **符号表管理**：注意到在本次作业中，常量、变量定义只能在主函数之前或函数块开头，因此对于错误处理来说最多只有一张全局符号表和一张局部符号表，因此我们可以简化符号表类的设计。
 
 
 
 ## 3. 模块设计
 
-### 3.1 语法分析器类设计
+### 3.1 错误处理类设计
 
 ```c++
-class GrammarAnalyzer {
+class ErrorHandle {
 private:
-    explicit GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, std::ofstream &pronFile);
-
-    Lexer &lexer;
+    explicit ErrorHandle(SymbolTable &symbolTable, ofstream &errorFile);   // Singleton Pattern
     SymbolTable &symbolTable;
-    ofstream &outFile;
-    ///////// analyze grammar //////////
-
+    ofstream &errorFile;
 public:
-    static GrammarAnalyzer &getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, std::ofstream &pronOutFile);
+    static ErrorHandle &getInstance(SymbolTable &symbolTable, ofstream &errorFile);
 
-    
-    void analyzeGrammar();
+    void printErrorLine(char errorCode, int &lineNum);
 
-    ///////// 出于篇幅限制，省略了其他递归调用的分析子程序 //////////
-    void programAnalyzer();
     ...
-    void defaultSwitchAnalyzer();
+
+    void checkChangeConstIden(string &lowerName, int &lineNum);
 };
 ```
 
-使用静态成员实现单例模式，对外提供 `getInstance()`方法来访问这个对象。同时修改上次作业词法分析类`Lexer.h`中`Lexer`的定义，把每次扫描的结果存到Token中，将`GrammarAnalyzer`设置为`friend class`，从而让语法分析程序可以直接调用词法分析器的结果。`SymbolTable`与`Lexer`相似，由`GrammarAnalyzer`管理，在本次作业中仅存储函数是否为有返回值函数这一性质。
+使用静态成员实现单例模式，对外提供 `getInstance()`方法来访问这个对象。坦言之，目前我的错误处理类设计并不理想——我的错误处理类究竟要承担什么功能？比如对于非法符号类型的错误，对于字符类型我会将符号传入对应的错误处理方法，用`checkIllegalCharReturnNull`判断是否存在非法字符；但字符串类型我就直接在`Lexer`中处理了，因为本身也要逐个扫描，仅仅调用`printErrorLine`打印错误信息。所以结果上这里互相调用非常散乱，可以认为就是面向过程了……在之后的错误处理上，我想我会重新规划这一设计。
+
+错误处理类提供的方法如下：
+| 名称                                                         | 描述                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------ |
+| `void printErrorLine(char errorCode, int &lineNum);`         | 打印错误码和行数                                       |
+| `void printErrorLine(char errorCode, int &lineNum, bool &findError);` | 重载，如果在本行已经打印过一次，就不再打印错误码和行数 |
+| `void printErrorOfReturnMatch(int &lineNum);`                | 打印返回值错误                                         |
+| `bool checkIllegalCharReturnNull(char &content, int &lineNum, bool &findError);` | 检查字符含有非法符号                                   |
+| `bool checkDupIdenDefine(string &lowerName, int &lineNum);`  | 检查重复定义的标识符                                   |
+| `bool checkDupFuncDefine(string &lowerName, int &lineNum);`  | 检查重复定义的函数                                     |
+| `bool checkUndefFuncCall(string &lowerName, int &lineNum);`  | 检查未定义函数调用                                     |
+| `bool checkArrayIndexNotInt(SymbolType expType, int &lineNum);` | 检查数组下标不为Int类型                                |
+| `bool checkUndefIdenRefer(string &lowerName, int &lineNum);` | 检查未定义标识符引用                                   |
+| `void printErrorOfNoReturnMatch(int &lineNum);`              | 打印无返回值的函数存在不匹配的return语句错误           |
+| `void printErrorOfUnMatchConst(int &lineNum);`               | 打印<常量>类型不一致错误                               |
+| `void checkChangeConstIden(string &lowerName, int &lineNum);` | 检查改变常量的值错误                                   |
+
+选择在词法分析程序中直接调用`printErrorLine`还是对应的`ErrorHandle`检查的主要依据是：是否在多处需要分析此类型错误。
 
 
 
-### 3.2 语法分析方法框架
-
-进入语法分析程序首先调用`programAnalyzer()`，分析＜程序＞语法成分，在`programAnalyzer()`结尾则输出语法分析结果，其他的分析程序与之类似。
-
-```c++
-void GrammarAnalyzer::analyzeGrammar() {
-    GET_TOKEN;
-    programAnalyzer();
-}
-
-/*＜程序＞::= ［＜常量说明＞］［＜变量说明＞］{＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞*/
-void GrammarAnalyzer::programAnalyzer() {
-    // 常量说明
-    if (TOKEN_TYPE == CONSTTK) {
-        constDeclarationAnalyzer();
-    }
-    // 变量说明或有返回值函数定义
-    if (TYPE_IDEN) {
-        varDeclarationAnalyzer();
-    }
-    // {＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞
-    functionDeclarationAnalyzer();
-    outFile << "<程序>" << endl;
-}
-```
-
-在这里我用宏封装了在语法分析程序中对词法分析程序调用的几个主要操作，例如：
+### 3.2 符号表类设计
 
 ```c++
-#define GET_TOKEN lexer.getNextToken()
-#define PRINT_LEX {outFile << lexer.analyzerResult;}
-#define PRINT_GET {outFile << lexer.analyzerResult;lexer.getNextToken();}
-#define CHECK_GET(A, B) {\
-if(TOKEN_TYPE != A){\
-cerr << B << endl;\
-}\
-PRINT_GET;\
-}
+class SymbolTable {
+private:
+    explicit SymbolTable();
+
+    friend class GrammarAnalyzer;
+
+    map<string, FuncSym> globalFuncTable;
+    map<string, Symbol> globalIdenTable;
+    map<string, Symbol> localIdenTable;
+public:
+    static SymbolTable &getInstance();
+
+    ...
+
+    vector<VarSym> getFuncParams(string &lower_name);
+};
 ```
 
-其中`GET_TOKEN`就是调用`lexer.getNextToken()`方法，把获取的Token保存到`lexer`类的属性中；`PRINT_LEX`则是输出词法分析结果；`PRINT_GET`是输出词法分析结果后调用`GET_TOKEN`获取下一个输入；`CHECK_GET(A, B)`则在`PRINT_GET`的基础上增加了对Token类型的校验，方便调试（但不具有错误处理功能）。
+符号表类同样采用单例模式，内部储存了三个哈希表：
 
-借助这些宏，本次作业的可读性有一定提升，之后也能比较方便地关闭这些输出。
+| 名称              | 描述                                                         |
+| ----------------- | ------------------------------------------------------------ |
+| `globalFuncTable` | 函数表，单独储存，添加时需要判断是否与表内元素或`globalIdenTable`重名 |
+| `globalIdenTable` | 全局常量、变量表，在读取完声明声明后用`move`从`localIdenTable`中得到 |
+| `localIdenTable`  | 当前的常量、变量、参数表                                     |
+
+对于符号，则是在父类`Symbol`中增加基本的类型（int, void ,char）、属性（func, var, const），在子类中添加各自特有的属性。为了方便比较同名符号，保存小写转换后的名字属性。
+
+```c++
+// 父类（没设成抽象类……）
+class Symbol {
+private:
+    string name;
+    string lowerName;
+    SymbolAtt symbolAtt;
+    SymbolType symbolType;
+public:
+    Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType);
+};
+
+// 变量类符号
+class VarSym : public Symbol {
+private:
+    int level;		// 存储维数
+    int length1;	// 维数1
+    int length2;	// 维数2
+public:
+    VarSym(string &pronName, string &pronLowerName, SymbolType pronType, int plevel, int plength1, int plength2);
+};
+
+// 函数类符号
+class FuncSym : public Symbol {
+private:
+    vector<VarSym> parameters;	// 函数形参
+public:
+    FuncSym(string &pronName, string &pronLowerName, SymbolType pronType);
+};
+
+// 常量类符号
+class ConSym : public Symbol {
+private:
+    int content;				// 常量初始值
+public:
+    ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent);
+};
+```
+
+符号表类对外提供的方法如下：
+
+| 名称              | 描述                                                         |
+| ----------------- | ------------------------------------------------------------ |
+| `bool hasIdenName(string &name);`  | 当前符号表中是否存在该名称符号（用于检查重名定义） |
+| `bool hasIdenNameIncludeGlobal(string &name);`  | 当前符号表以及全局符号表中是否存在该名称符号（用于检查未定义调用） |
+| `bool hasFuncName(string &name);`  | 是否存在该名称函数 |
+| `void insertSymbolToLocal(const Symbol &symbol);`  | 将符号插入到当前的局部符号表 |
+| `void insertFuncToGlobal(const FuncSym &funcSym);`  | 插入函数到全局函数表 |
+| `void endGlobalIdenSymbol();`  | 将局部符号表`move`为全局符号表 |
+| `void endLocalIdenSymbol();`  | 清空局部符号表 |
+| `SymbolType convertTypeCode(TypeCode typeCode);`  | 将`TypeCode`转换为对应的`SymbolType` |
+| `SymbolType getFuncType(string &lower_name);`  | 获取函数类型 |
+| `SymbolType getIdenType(string &lower_name);`  | 获取符号类型 |
+| `SymbolAtt getIdenAtt(string &lower_name);`  | 获取符号属性 |
+| `vector<VarSym> getFuncParams(string &lower_name);`  | 返回函数的参数表向量 |
 
 
 
@@ -135,73 +155,37 @@ PRINT_GET;\
 
 在编码后，我进行了如下调整：
 
-1. 为之后的错误处理考虑，我增加对数组类型赋值、定义语句中，括号嵌套层数和元素个数的校验。
+1. 增加一键开关输出的宏，在上一次的语法分析作业中，我将打印词法、语法分析结果用PRINT_GET、PRINT_MES等宏封装起来，而此次作业则增加`ifdef`语句，方便开关输出：
+
    ```c++
-string GrammarAnalyzer::varDefinitionAnalyzer(TypeCode typeCode) {
-       int level = 0, length1 = 0, length2 = 0;
-       if (TOKEN_TYPE == LBRACK) {
-           // 保存数组类型中的层数、行列数
-           arrayVarAnalyzer(level, length1, length2);
-       }
-       if (TOKEN_TYPE == ASSIGN) {
-           PRINT_GET;
-           // 读取值并进行校验
-           varInitAnalyzer(level, length1, length2, (typeCode == INTTK));
-           return "<变量定义及初始化>\n";
-       } else if (TOKEN_TYPE == COMMA) {
-           ...
-           return "<变量定义无初始化>\n";
-       }
-       return "<变量定义无初始化>\n";
-}
+   #ifdef CLOSE_GRAMMER_OUTPUT
+   #define PRINT_GET lexer.getNextToken();
+   #define PRINT_MES(Message)
+   #else
+   #define PRINT_GET outFile << lexer.analyzerResult << endl;lexer.getNextToken();
+   #define PRINT_MES(Message) outFile << Message << endl;
+   #endif
    ```
-   这里的`arrayVarAnalyzer(int &level, int &l1, int &l2)`使用引用从而实现对多个值的修改，进而可以在`varInitAnalyzer`中进行检查。
 
-2. 对于变量说明和有返回值函数定义有着相同的声明头部（int 和char）的情况，使用条件语句特判：
+2. 对于数组类型个数不匹配，我选择了一旦发现问题，立刻读取到“}”末尾的跳读方式，进行相应的错误局部化处理；然而在处理函数的参数表时则不能这样做：因为函数参数表结束的标志：“)”可能缺少，就会导致跳读无法正常结束，这也导致了我课下测试Testfile 5 TLE的原因。
+
+   而为了修改，我最后选择了先保存函数的实参表，然后从函数符号类`FuncSym`中获取向量`vector<VarSym> parameters`，先比较二者长度，再逐个检查类型是否一致。
 
    ```c++
-   /*＜变量说明＞  ::= ＜变量定义＞;{＜变量定义＞;}
-    * 需要判断第一次遇到有返回值函数的情况*/
-void GrammarAnalyzer::varDeclarationAnalyzer() {
-       // 变量定义
-       string tmp_identity, tmp_output1, tmp_output2, tmp_output3;
-       TypeCode tmp_typeCode = WRONG;
-       bool meetFunc = false;
-       int loopTime = 0;
-       do {
-           // ＜变量定义无初始化＞|＜变量定义及初始化＞|＜有返回值函数定义＞
-           // ＜类型标识符＞
-           tmp_output1 = lexer.analyzerResult;
-           tmp_typeCode = lexer.typeCode;
-           lexer.getNextToken();
-           // ＜标识符＞
-           tmp_output2 = lexer.analyzerResult;
-           tmp_identity = lexer.lexToken.content_p;
-           lexer.getNextToken();
-           // ＜有返回值函数定义＞
-           if (TOKEN_TYPE == LPARENT) {
-               if (loopTime != 0) {
-                   outFile << "<变量说明>" << endl;
+   if (vectorVar.size() != referParamsList.size()) {
+           // 函数参数个数不匹配
+           // 函数调用时实参个数大于或小于形参个数
+           PRINT_G_ERR('d');
+       } else {
+           for (int i = 0; i < referParamsList.size(); i++) {
+               if (vectorVar.at(i).symbolType != referParamsList.at(i)) {
+                   // 函数参数类型不匹配
+                   PRINT_G_ERR('e');
+                   break;
                }
-               outFile << tmp_output1;
-               outFile << tmp_output2;
-               symbolTable.addFunc(tmp_identity, true);
-               meetFunc = true;
-               speReValFuncDefAnalyzer();
-           } else {
-               // ＜变量定义＞
-               ...
            }
-           if (meetFunc) {
-               return;
-           }
-           ++loopTime;
-       } while (TYPE_IDEN);
-       outFile << "<变量说明>" << endl;
-   }
+       }
    ```
-   
-   这里的设计思路比较混乱，比如在半途增加了一个`loopTime`用来记录变量说明的循环次数，如果是第一次循环就遇到了有返回值函数调用语句，那么就不输出“<变量说明>”，这都是在Debug时的惨痛经历……好在目前可以运行，之后应该会重构。
 
 其他部分基本与当初的设计思路一致。
 
@@ -209,6 +193,4 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
 
 ## 5. 个人总结
 
-这次的语法分析在之前的词法分析基础上进行修改。在这次我周围不少同学因为中文的输出而产生问题，比如我的一个舍友在奇数个中文时会显示乱码，还有群里出现的最后两个汉字乱码的问题……这个貌似只能解释称Windows的锅；另外还有因为“\n \r”的各种问题，如果不是自己过滤输入中的空白字符应该就不会发生。
-
-目前让我比较担忧的就是之后的错误处理和符号表管理能否少出点Bug了，这两天也会陆续重新调整下各语法分析函数的功能顺序，以实现与后续功能需求更平滑的衔接。
+上次写语法分析设计文档时夸下的海口果然一个都没实现，这次错误处理开头又把语法分析的遗留问题重新整理了一遍。另外这次错误处理的课下测试点感觉也不强，比如我之前对于形如`while(1)`的语句部分为空语句，但缺少分号的情况就无法正确处理，结果也通过了全部测试点……不知道是为了避免歧义不做考察还是挖坑，但这意味着我的错误处理代码还是有可能存在其他问题的。
