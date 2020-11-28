@@ -116,10 +116,13 @@ void Lexer::getNextToken() {
         } else {
             do {
                 // 32,33,35-126
-                if (!findError && !((32 <= lex_c && lex_c <= 33) || (35 <= lex_c && lex_c <= 126))){
+                if (!findError && !((32 <= lex_c && lex_c <= 33) || (35 <= lex_c && lex_c <= 126))) {
                     PRINT_ERR('a')  // illegal symbol appears
                 }
                 lex_token[pt++] = lex_c;
+                if (lex_c == '\\') {
+                    lex_token[pt++] = lex_c;
+                }
                 lex_c = inFile.get();
             } while (lex_c != '\"');
             lex_token[pt] = '\0';

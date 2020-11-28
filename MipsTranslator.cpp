@@ -27,18 +27,19 @@ void MipsTranslator::translate() {
     // .text
     MIPS_PRINT(".text")
     int value1, value2;
-    bool isImm1, isImm2;
+    bool isImm1, isImm2, isGlobal;
     bool hasNotMeetFunc = true;
     FuncSym *mips_p_current_func;
     mips_search_map = &(symbolTable.globalIdenTable);
     list<ThreeAddCode *> codeList = irCode.getThreeAddCodeList();
+    stack<ThreeAddCode *> funcParamsStack;
     for (auto thisCode : codeList) {
         cout << thisCode->toString() << endl;
         if (true) {
             MIPS_PRINT("############ " << thisCode->toString())
         }
         OperatorType thisOp = thisCode->op;
-        isImm1 = false, isImm2 = false;
+        isImm1 = false, isImm2 = false, isGlobal = false;
         if (thisOp == OpBEZ || thisOp == OpBNEZ) {
             continue;
         } else if (thisOp == OpFunc) {
@@ -46,7 +47,7 @@ void MipsTranslator::translate() {
                 MIPS_CODE("jr\t$ra")
             }
             hasNotMeetFunc = false;
-            mips_p_current_func = symbolTable.getFuncPtr(thisCode->obj[1].str);
+            mips_p_current_func = symbolTable.getFuncPtr(RS2.str);
             mips_search_map = &(mips_p_current_func->funcLocalTable);
             MIPS_PRINT("f_" << mips_p_current_func->name << ":")
             if (mips_p_current_func->symbolType == MAIN) {
@@ -55,9 +56,8 @@ void MipsTranslator::translate() {
             }
             mips_search_map = &(mips_p_current_func->funcLocalTable);
         } else if (thisOp == OpScanf) {
-            bool isGlobal = false;
             VarSym *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map,
-                                                                 thisCode->obj[0].str, isGlobal);
+                                                                 RD1.str, isGlobal);
             if (varSym->symbolType == INT) {
                 MIPS_CODE("li\t\t$v0,\t5")
             } else {
@@ -68,30 +68,30 @@ void MipsTranslator::translate() {
             string pp_reg = p_reg;
             MIPS_CODE("sw\t\t$v0,\t" << to_string(address) << "(" << pp_reg << ")")
         } else if (thisOp == OpPrint) {
-            SymbolType printType = thisCode->obj[0].type;
+            SymbolType printType = RD1.type;
             switch (printType) {
                 case VOID:
                     // 字符串
-                    MIPS_CODE("la\t\t$a0,\t" << (thisCode->obj[1]).str)
+                    MIPS_CODE("la\t\t$a0,\t" << (RS2).str)
                     MIPS_CODE("li\t\t$v0,\t4")
                     break;
                 default:
-                    loadValue(thisCode->obj[1], $a0, true, isImm1, value1);
+                    loadValue(RS2, $a0, true, isImm1, value1);
                     int syscallNum = (printType == INT) ? 1 : 11;
                     MIPS_CODE("li\t\t$v0,\t" << to_string(syscallNum));
             }
             MIPS_CODE("syscall")
         } else if (thisOp == OpASSIGN) {
-            loadValue(thisCode->obj[1], $t0, true, isImm1, value1);
-            saveValue(thisCode->obj[0].str, $t0);
+            loadValue(RS2, $t0, true, isImm1, value1);
+            saveValue(RD1.str, $t0);
         } else if (thisOp == OpAssArray) {
             // AssArr  [string  : a]   [string  : tmp_12]      [int/char: 1]
-            loadValue(thisCode->obj[2], $t1, true, isImm2, value2);
-            loadValue(thisCode->obj[1], $t0, false, isImm1, value1);
+            loadValue(RT3, $t1, true, isImm2, value2);
+            loadValue(RS2, $t0, false, isImm1, value1);
             bool isGo = false;
-            auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, thisCode->obj[0].str, isGo);
+            auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, RD1.str, isGo);
             string pp_reg = (isGo ? reg_gp : reg_fp);
-//            int arrayOffset = thisCode->obj[1].num + varSym->offset;
+//            int arrayOffset = RS2.num + varSym->offset;
 //            int addr = isGo ? (arrayOffset * 4) : -(arrayOffset * 4);
 //            MIPS_CODE("sw\t\t$t1,\t" << to_string(addr) << "(" << pp_reg << ")")
             if (isImm1) {
@@ -109,29 +109,28 @@ void MipsTranslator::translate() {
                 MIPS_CODE("sw\t\t$t1,\t0($t2)")
             }
         } else if (thisOp == OpGetArray) {
-            loadValue(thisCode->obj[2], $t0, false, isImm2, value2);
-            bool isGo = false;
-            auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, thisCode->obj[1].str, isGo);
-            string pp_reg = (isGo ? reg_gp : reg_fp);
+            loadValue(RT3, $t0, false, isImm2, value2);
+            auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, RS2.str, isGlobal);
+            string pp_reg = (isGlobal ? reg_gp : reg_fp);
             if (isImm2) {
                 int arrayOffset = value2 + varSym->offset;
-                int addr = isGo ? (arrayOffset * 4) : -(arrayOffset * 4);
+                int addr = isGlobal ? (arrayOffset * 4) : -(arrayOffset * 4);
                 MIPS_CODE("lw\t\t$t1,\t" << to_string(addr) << "(" << pp_reg << ")")
             } else {
-                int addr = isGo ? (varSym->offset * 4) : -(varSym->offset * 4);
+                int addr = isGlobal ? (varSym->offset * 4) : -(varSym->offset * 4);
                 MIPS_CODE("addi\t$t2,\t" << pp_reg << ",\t" << to_string(addr))
                 MIPS_CODE("sll\t\t$t0,\t$t0,\t2")
-                if (isGo) {
+                if (isGlobal) {
                     MIPS_CODE("add\t\t$t2,\t$t2,\t$t0")
                 } else {
                     MIPS_CODE("sub\t\t$t2,\t$t2,\t$t0")
                 }
                 MIPS_CODE("lw\t\t$t1,\t0($t2)")
             }
-            saveValue(thisCode->obj[0].str, $t1);
+            saveValue(RD1.str, $t1);
         } else if (thisOp == OpPLUS) {
-            loadValue(thisCode->obj[1], $t0, false, isImm1, value1);
-            loadValue(thisCode->obj[2], $t1, false, isImm2, value2);
+            loadValue(RS2, $t0, false, isImm1, value1);
+            loadValue(RT3, $t1, false, isImm2, value2);
             if (isImm1 && isImm2) {
                 MIPS_CODE("li\t\t$t2,\t" << to_string(value1 + value2))
             } else if (!isImm1 && isImm2) {
@@ -141,10 +140,10 @@ void MipsTranslator::translate() {
             } else {
                 MIPS_CODE("add\t\t$t2,\t$t0,\t$t1")
             }
-            saveValue(thisCode->obj[0].str, $t2);
+            saveValue(RD1.str, $t2);
         } else if (thisOp == OpMINU) {
-            loadValue(thisCode->obj[1], $t0, false, isImm1, value1);
-            loadValue(thisCode->obj[2], $t1, false, isImm2, value2);
+            loadValue(RS2, $t0, false, isImm1, value1);
+            loadValue(RT3, $t1, false, isImm2, value2);
             if (isImm1 && isImm2) {
                 MIPS_CODE("li\t\t$t2,\t" << to_string(value1 - value2))
             } else if (!isImm1 && isImm2) {
@@ -155,34 +154,37 @@ void MipsTranslator::translate() {
             } else {
                 MIPS_CODE("sub\t\t$t2,\t$t0,\t$t1")
             }
-            saveValue(thisCode->obj[0].str, $t2);
+            saveValue(RD1.str, $t2);
         } else if (thisOp == OpMULT) {
-            loadValue(thisCode->obj[1], $t0, true, isImm1, value1);
-            loadValue(thisCode->obj[2], $t1, true, isImm2, value2);
+            loadValue(RS2, $t0, true, isImm1, value1);
+            loadValue(RT3, $t1, true, isImm2, value2);
             MIPS_CODE("mult\t$t0,\t$t1")
             MIPS_CODE("mflo\t$t2")
-            saveValue(thisCode->obj[0].str, $t2);
+            saveValue(RD1.str, $t2);
         } else if (thisOp == OpDIV) {
-            loadValue(thisCode->obj[1], $t0, true, isImm1, value1);
-            loadValue(thisCode->obj[2], $t1, true, isImm2, value2);
+            loadValue(RS2, $t0, true, isImm1, value1);
+            loadValue(RT3, $t1, true, isImm2, value2);
             MIPS_CODE("div\t\t$t0,\t$t1")
             MIPS_CODE("mflo\t$t2")
-            saveValue(thisCode->obj[0].str, $t2);
+            saveValue(RD1.str, $t2);
         } else if (thisOp == OpExit) {
             MIPS_CODE("li\t\t$v0,\t10")
             MIPS_CODE("syscall")
         } else if (thisOp == OpJMain) {
             MIPS_CODE("j\tf_main")
         } else if (thisOp == OpLabel) {
-            MIPS_PRINT(thisCode->obj[0].str << ":")
+            MIPS_PRINT(RD1.str << ":")
         } else if (thisOp == OpJmp) {
-            MIPS_CODE("j\t\t" << thisCode->obj[0].str)
+            MIPS_CODE("j\t\t" << RD1.str)
         } else if (thisOp == OpEQL || thisOp == OpNEQ) {
-            loadValue(thisCode->obj[1], $t0, false, isImm1, value1);
-            loadValue(thisCode->obj[2], $t1, false, isImm2, value2);
-            string branch_model = (thisCode->p_next->op == OpBEZ ^ thisOp == OpNEQ) ? "bne\t\t" : "beq\t\t";
+            loadValue(RS2, $t0, false, isImm1, value1);
+            loadValue(RT3, $t1, false, isImm2, value2);
+            bool branch_when_false = thisCode->p_next->op == OpBEZ;
+            string branch_model = (branch_when_false ^ (thisOp == OpNEQ)) ? "bne\t\t" : "beq\t\t";
             if (isImm1 && isImm2) {
-                if (value1 != value2) {
+                bool equalValue = branch_when_false ^(value1 == value2);
+                if ((thisOp == OpEQL && equalValue)
+                    || (thisOp == OpNEQ && !equalValue)) {
                     MIPS_CODE("j\t" << (thisCode->p_next->obj[0].str))
                 }
             } else {
@@ -193,8 +195,50 @@ void MipsTranslator::translate() {
                 }
                 MIPS_CODE(branch_model << "$t0,\t$t1,\t" << (thisCode->p_next->obj[0].str))
             }
+        } else if (thisOp == OpLSS || thisOp == OpLEQ || thisOp == OpGRE || thisOp == OpGEQ) {
+            loadValue(RS2, $t0, false, isImm1, value1);
+            loadValue(RT3, $t1, false, isImm2, value2);
+            bool branch_when_true = (thisCode->p_next->op == OpBNEZ);
+            if (thisOp == OpLSS) {
+                CONDITION(value1 < value2, "blt", "bgt", "bge", "ble")
+            } else if (thisOp == OpLEQ) {
+                CONDITION(value1 <= value2, "ble", "bge", "bgt", "blt")
+            } else if (thisOp == OpGRE) {
+                CONDITION(value1 > value2, "bgt", "blt", "ble", "bge")
+            } else {
+                CONDITION(value1 >= value2, "bge", "ble", "blt", "bgt")
+            }
+        } else if (thisOp == OpReturn) {
+            loadValue(RS2, $v0, true, isImm1, value1);
+            MIPS_CODE("jr\t\t$ra")
+        } else if (thisOp == OpRetVar) {
+            int retOffset = ((VarSym *) symbolTable.getSymbolPtr(mips_search_map, RS2.str, isGlobal))->offset;
+            MIPS_CODE("sw\t\t$v0,\t" << to_string(-4 * retOffset) << "($fp)")
+        } else if (thisOp == OpPaVal) {
+            funcParamsStack.push(thisCode);
+        } else if (thisOp == OpCall) {
+            ThreeAddCode *paramsPtr;
+            FuncSym *callFuncPtr = symbolTable.getFuncPtr(RD1.str);
+            int callFuncParamsSize = callFuncPtr->parameters.size();
+            while (callFuncParamsSize > 0) {
+                paramsPtr = funcParamsStack.top();
+                funcParamsStack.pop();
+                loadValue(paramsPtr->obj[1], $t0, true, isImm1, value1);
+                callFuncParamsSize--;
+                MIPS_CODE("sw\t\t$t0,\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
+            }
+            int funcOffset = 4 * callFuncPtr->funcSpace + 8;
+            MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(-funcOffset))
+            MIPS_CODE("sw\t\t$ra,\t4($sp)")
+            MIPS_CODE("sw\t\t$fp,\t8($sp)")
+            MIPS_CODE("addi\t$fp,\t$sp,\t" << to_string(funcOffset))
+            MIPS_CODE("jal\t\tf_" << RD1.str)
+            MIPS_CODE("lw\t\t$fp,\t8($sp)")
+            MIPS_CODE("lw\t\t$ra,\t4($sp)")
+            MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(funcOffset))
         }
     }
+
 }
 
 void MipsTranslator::saveValue(string &obj, const string &regName) {

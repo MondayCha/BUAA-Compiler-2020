@@ -51,7 +51,7 @@ PRINT_G_SEM\
 }
 
 #define STORE_EXP(opType, obj1, obj2) \
-ans = genTmpVar_and_insert();           \
+ans = genTmpVar_and_insert(INT);           \
 irCode.addThreeAddCode(new ThreeAddCode(opType, ans, obj1, obj2));\
 op1 = move(ans);
 
@@ -137,7 +137,7 @@ public:
 
     SymbolType factorAnalyzer(string &exp_str, int &exp_int);
 
-    string genTmpVar_and_insert();
+    string genTmpVar_and_insert(SymbolType symType);
 
     void conditionalStatementAnalyzer();
 
@@ -161,9 +161,10 @@ public:
 
     void switchStatementAnalyzer();
 
-    void situationSwitchAnalyzer(SymbolType switchType);
+    void situationSwitchAnalyzer(SymbolType switchType,SymbolType isIntOrChar,
+                                 string &exp1_str, int &exp1_int, string &end_label);
 
-    SymbolType constantAnalyzer();
+    SymbolType constantAnalyzer(int &switchConstant);
 
     bool defaultSwitchAnalyzer();
 

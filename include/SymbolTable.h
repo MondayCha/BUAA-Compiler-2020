@@ -43,7 +43,7 @@ public:
 
     void insertSymbolToLocal(Symbol *symbol);
 
-    string insertTempSymToLocal(string &tmpName, int pronOffset);
+    string insertTempSymToLocal(string &tmpName, SymbolType symType, int pronOffset);
 
     void insertFuncToGlobal(FuncSym *funcSym);
 
@@ -62,6 +62,8 @@ public:
     vector<VarSym> getFuncParams(string &lower_name);
 
     FuncSym *getFuncPtr(string &lower_name);
+
+    void printMap(map<string, Symbol *> *searchMap, string mapName);
 };
 
 class Symbol {
@@ -72,6 +74,8 @@ public:
     SymbolType symbolType;
 
     Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType);
+
+    string toString();
 };
 
 class VarSym : public Symbol {

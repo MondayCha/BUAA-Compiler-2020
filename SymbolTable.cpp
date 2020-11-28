@@ -39,12 +39,12 @@ void SymbolTable::insertSymbolToLocal(Symbol *symbol) {
     localIdenTable.insert({symbol->lowerName, symbol});
 }
 
-string SymbolTable::insertTempSymToLocal(string &tmpName, int pronOffset) {
+string SymbolTable::insertTempSymToLocal(string &tmpName, SymbolType symType, int pronOffset) {
     if (hasIdenName(tmpName)) {
-        return insertTempSymToLocal(string("t_").append(tmpName), pronOffset);
+        return insertTempSymToLocal(string("t_").append(tmpName), symType, pronOffset);
     }
     insertSymbolToLocal(
-            new VarSym(tmpName, tmpName, INT, 0, 0, 0, pronOffset));
+            new VarSym(tmpName, tmpName, symType, 0, 0, 0, pronOffset));
     return tmpName;
 }
 
@@ -147,11 +147,22 @@ Symbol *SymbolTable::getSymbolPtr(map<string, Symbol *> *searchMap, string &lowe
     return nullptr;
 }
 
+void SymbolTable::printMap(map<string, Symbol *> *searchMap, string mapName) {
+    // cerr << "////////// print map name is " << mapName << " address is " << to_string(reinterpret_cast<int>(searchMap) << endl;
+    for (auto p : *searchMap) {
+        cerr << p.second->toString() << endl;
+    }
+}
+
 Symbol::Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType) {
     name = pronName;
     lowerName = pronLowerName;
     symbolAtt = pronAtt;
     symbolType = pronType;
+}
+
+string Symbol::toString() {
+    return to_string(symbolType) + " " + lowerName;
 }
 
 //string Symbol::getName() {

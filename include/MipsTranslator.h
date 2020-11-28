@@ -13,12 +13,44 @@
 
 #define p_reg (isGlobal ? $gp : $fp)
 
+#define RD1 thisCode->obj[0]
+#define RS2 thisCode->obj[1]
+#define RT3 thisCode->obj[2]
+
 #define $t0 reg_t0
 #define $t1 reg_t1
 #define $t2 reg_t2
 #define $a0 reg_a0
 #define $gp reg_gp
 #define $fp reg_fp
+#define $v0 reg_v0
+
+#define CONDITION(condition,str1,str2,str3,str4)\
+if (branch_when_true) {\
+if (isImm1 && isImm2) {\
+if (condition) {\
+MIPS_CODE("j\t" << (thisCode->p_next->obj[0].str))\
+}\
+} else if (!isImm1 && isImm2) {\
+MIPS_CODE(str1 << "\t\t$t0,\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
+} else if (isImm1 && !isImm2) {\
+MIPS_CODE(str2 << "\t\t$t1,\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
+} else {\
+MIPS_CODE(str1 << "\t\t$t0,\t$t1,\t" << (thisCode->p_next->obj[0].str))\
+}\
+} else {\
+if (isImm1 && isImm2) {\
+if (!(condition)) {\
+MIPS_CODE("j\t" << (thisCode->p_next->obj[0].str))\
+}\
+} else if (!isImm1 && isImm2) {\
+MIPS_CODE(str3 << "\t\t$t0,\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
+} else if (isImm1 && !isImm2) {\
+MIPS_CODE(str4 << "\t\t$t1,\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
+} else {\
+MIPS_CODE(str3 << "\t\t$t0,\t$t1,\t" << (thisCode->p_next->obj[0].str))\
+}\
+}
 
 class MipsTranslator {
 private:
@@ -28,6 +60,7 @@ private:
     const string reg_a0 = "$a0";
     const string reg_gp = "$gp";
     const string reg_fp = "$fp";
+    const string reg_v0 = "$v0";
 
     explicit MipsTranslator(ofstream &mipsFile, IRCodeManager &irCode, SymbolTable &symbolTable);
 

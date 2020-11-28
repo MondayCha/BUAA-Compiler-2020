@@ -42,10 +42,13 @@ void IRCodeManager::addStringData(stringData pronString) {
 }
 
 string ThreeAddCode::toString() {
-    return opTypeToString(op)
-           + "\t[" + branchToString(obj[0].branch) + obj[0].str + "] "
-           + "\t[" + branchToString(obj[1].branch) + obj[1].str + "] "
-           + "\t[" + branchToString(obj[2].branch) + obj[2].str + "] ";
+    string ans = opTypeToString(op);
+    for (int i = 0; i < 3; i++) {
+        if (obj[i].str != "") {
+            ans.append("\t\t[" + branchToString(obj[i].branch) + obj[i].str + "]");
+        }
+    }
+    return ans;
 
 }
 
@@ -84,6 +87,10 @@ ThreeAddCode::ThreeAddCode(OperatorType op, SymbolType rrd, string rrs, int rrt)
     INIT_THREE_ADD_CODE
 }
 
+ThreeAddCode::ThreeAddCode(OperatorType op, SymbolType rrd, int rrs, string rrt) : op(op) {
+    INIT_THREE_ADD_CODE
+}
+
 ThreeAddCode::ThreeAddCode(OperatorType op, string rrd, string rrs, int rrt) : op(op) {
     INIT_THREE_ADD_CODE
 }
@@ -109,11 +116,11 @@ string ThreeAddCode::opTypeToString(OperatorType op) {
 }
 
 string ThreeAddCode::branchToString(int index) {
-    if(index == 0){
+    if (index == 0) {
         return "string  : ";
-    }else if(index == 1){
+    } else if (index == 1) {
         return "symType : ";
-    }else{
+    } else {
         return "int/char: ";
     }
 }

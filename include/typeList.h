@@ -41,6 +41,12 @@ enum OperatorType {
     OpBNEZ,
     OpJmp,
     OpLabel,
+    // 2020.11.27
+    OpParam,
+    OpPaVal,
+    OpCall,
+    OpReturn,
+    OpRetVar,
 };
 
 const char *const operatorString[] = {
@@ -68,6 +74,11 @@ const char *const operatorString[] = {
         "bnez  ",
         "Jmp to",
         "Label:",
+        "params",
+        "call p",
+        "Fc Cal",
+        "Return",
+        "retVar",
 };
 
 /////////////////////////////////////////////////

@@ -47,6 +47,7 @@ struct GoalObject {
 
 class ThreeAddCode {
 private:
+
     OperatorType op;
     GoalObject obj[3];
     ThreeAddCode *p_next = nullptr;
@@ -69,6 +70,8 @@ public:
     ThreeAddCode(OperatorType op, SymbolType rd, string rs, string rt);
 
     ThreeAddCode(OperatorType op, SymbolType rrd, string rrs, int rrt);
+
+    ThreeAddCode(OperatorType op, SymbolType rrd, int rrs, string rrt);
 
     ThreeAddCode(OperatorType op, string rrd, string rrs, int rrt);
 
