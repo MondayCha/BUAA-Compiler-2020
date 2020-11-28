@@ -1244,7 +1244,7 @@ void GrammarAnalyzer::valParaTableAnalyzer(vector<VarSym> &vectorVar) {
         }
         while (TOKEN_TYPE == COMMA) {
             PRINT_GET
-            st = expressionAnalyzer();
+            st = expressionAnalyzer(exp_str, exp_int);
             if (st != VOID) {
                 referParamsList.push_back(st);
                 if (st == INT && st == CHAR) {
