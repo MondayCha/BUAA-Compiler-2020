@@ -49,7 +49,7 @@ void MipsTranslator::translate() {
             hasNotMeetFunc = false;
             mips_p_current_func = symbolTable.getFuncPtr(RS2.str);
             mips_search_map = &(mips_p_current_func->funcLocalTable);
-            MIPS_PRINT("f_" << mips_p_current_func->name << ":")
+            MIPS_PRINT("f_" << mips_p_current_func->lowerName << ":")
             if (mips_p_current_func->symbolType == MAIN) {
                 MIPS_CODE("move\t$fp,\t$sp")
                 MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(-4 * (mips_p_current_func->funcSpace) - 8))
@@ -209,7 +209,9 @@ void MipsTranslator::translate() {
                 CONDITION(value1 >= value2, "bge", "ble", "blt", "bgt")
             }
         } else if (thisOp == OpReturn) {
-            loadValue(RS2, $v0, true, isImm1, value1);
+            if (RD1.type != VOID) {
+                loadValue(RS2, $v0, true, isImm1, value1);
+            }
             MIPS_CODE("jr\t\t$ra")
         } else if (thisOp == OpRetVar) {
             int retOffset = ((VarSym *) symbolTable.getSymbolPtr(mips_search_map, RS2.str, isGlobal))->offset;

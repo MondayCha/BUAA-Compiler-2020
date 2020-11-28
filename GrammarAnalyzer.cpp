@@ -207,8 +207,8 @@ void GrammarAnalyzer::varDeclarationAnalyzer() {
         lexer.getNextToken();
         // ＜标识符＞
         tmp_output2 = lexer.analyzerResult;
-        tmp_name = lexer.strToken;
-        tmp_lowerName = lexer.lexToken.content_p;
+        tmp_name = LEX_NAME;
+        tmp_lowerName = LEX_LONA;
         lexer.getNextToken();
         // ＜有返回值函数定义＞
         if (TOKEN_TYPE == LPARENT) {
@@ -770,20 +770,32 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str) {
 SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
     SymbolType returnValue = VOID;
     bool calculate = false;
+    bool firstAddSub = false;
     bool isMinus = false;
     if (TYPE_ADDE) {
         isMinus = (TOKEN_TYPE == MINU);
         PRINT_GET
-        calculate = true;
+        firstAddSub = true;
     }
     string ans, op1, op2;
     returnValue = itemAnalyzer(op1, exp_int);
     bool op1isInt = (returnValue == CHAR || returnValue == INT);
     int op1Int = exp_int;
-    if (calculate && isMinus) {
-        if (op1isInt) {
-            STORE_EXP(OpMINU, 0, exp_int)
+    if (firstAddSub && (returnValue == CHAR || returnValue == CHARVAR)) {
+        calculate = true;
+        if (returnValue == CHAR) {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, 0, exp_int)
         } else {
+            STORE_EXP(isMinus ? OpMINU : OpPLUS, 0, op1)
+        }
+        op1isInt = false;
+    } else if (firstAddSub && isMinus) {
+        if (op1isInt) {
+            exp_int = -exp_int;
+            op1Int = exp_int;
+            op1 = to_string(exp_int);
+        } else {
+            calculate = true;
             STORE_EXP(OpMINU, 0, op1)
         }
     }
@@ -795,8 +807,10 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
         bool op2isInt = (tmpType == CHAR || tmpType == INT);
         if (op1isInt && op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, exp_int)
+            op1isInt = false;
         } else if (op1isInt && !op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, op2)
+            op1isInt = false;
         } else if (!op1isInt && op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, exp_int)
         } else {
@@ -862,11 +876,9 @@ SymbolType GrammarAnalyzer::factorAnalyzer(string &exp_str, int &exp_int) {
             // ＜标识符＞'['＜表达式＞']''['＜表达式＞']'
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
             returnValue = symbolTable.getIdenType(lower_name);
-            // 下次处理
             exp_str = arrayExpAssignAnalyzer(lower_name);
         } else if (TOKEN_TYPE == LPARENT) {
             // ＜有返回值函数调用语句＞
-            // 下次处理
             returnValue = functionCallAnalyzer(lower_name);
             exp_str = genTmpVar_and_insert(returnValue);
             ADD_MIDCODE(OpRetVar, returnValue, exp_str, "")
@@ -1054,6 +1066,7 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
 
 /*＜返回语句＞   ::=  return['('＜表达式＞')']*/
 void GrammarAnalyzer::returnStatementAnalyzer() {
+    bool addReturnMidcode = false;
     CHECK_GET(RETURNTK, "return keyword");
     if (TOKEN_TYPE == LPARENT) {
         // return (
@@ -1083,6 +1096,7 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
         } else {
             ADD_MIDCODE(OpReturn, expType, exp_str, "")
         }
+        addReturnMidcode = true;
         // RETURN
         CHECK_RPARENT
     } else if (grammar_func_with_return != VOID) {
@@ -1090,6 +1104,8 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
     }
     if (grammar_meet_main) {
         ADD_MIDCODE(OpExit, "", "", "")
+    } else if (addReturnMidcode == false) {
+        ADD_MIDCODE(OpReturn, VOID, "", "")
     }
     grammar_state_with_return = true;
     PRINT_MES(("<返回语句>"))
@@ -1235,8 +1251,14 @@ void GrammarAnalyzer::valParaTableAnalyzer(vector<VarSym> &vectorVar) {
         int exp_int;
         SymbolType st = expressionAnalyzer(exp_str, exp_int);
         if (st != VOID) {
-            referParamsList.push_back(st);
-            if (st == INT && st == CHAR) {
+            if (st == INTVAR) {
+                referParamsList.push_back(INT);
+            } else if (st == CHARVAR) {
+                referParamsList.push_back(CHAR);
+            } else {
+                referParamsList.push_back(st);
+            }
+            if (st == INT || st == CHAR) {
                 ADD_MIDCODE(OpPaVal, st, exp_int, "")
             } else {
                 ADD_MIDCODE(OpPaVal, st == INTVAR ? INT : CHAR, exp_str, "")
@@ -1246,8 +1268,14 @@ void GrammarAnalyzer::valParaTableAnalyzer(vector<VarSym> &vectorVar) {
             PRINT_GET
             st = expressionAnalyzer(exp_str, exp_int);
             if (st != VOID) {
-                referParamsList.push_back(st);
-                if (st == INT && st == CHAR) {
+                if (st == INTVAR) {
+                    referParamsList.push_back(INT);
+                } else if (st == CHARVAR) {
+                    referParamsList.push_back(CHAR);
+                } else {
+                    referParamsList.push_back(st);
+                }
+                if (st == INT || st == CHAR) {
                     ADD_MIDCODE(OpPaVal, st, exp_int, "")
                 } else {
                     ADD_MIDCODE(OpPaVal, st == INTVAR ? INT : CHAR, exp_str, "")
@@ -1393,7 +1421,7 @@ string GrammarAnalyzer::genTmpVar_and_insert(SymbolType symType) {
     string ans = "tmp_" + to_string(++index);
     ans = symbolTable.insertTempSymToLocal(ans, symType, grammar_var_offset);
     grammar_var_offset++;
-    cout << "/////////////////// gen tmp named " << ans << " and offset is " << to_string(grammar_var_offset) << endl;
+    // cout << "/////////////////// gen tmp named " << ans << " and offset is " << to_string(grammar_var_offset) << endl;
     return ans;
 }
 
