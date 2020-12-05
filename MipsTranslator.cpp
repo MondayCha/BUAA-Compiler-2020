@@ -34,7 +34,7 @@ void MipsTranslator::translate() {
     list<ThreeAddCode *> codeList = irCode.getThreeAddCodeList();
     stack<ThreeAddCode *> funcParamsStack;
     for (auto thisCode : codeList) {
-        cout << thisCode->toString() << endl;
+        irCode.ircodeFile << thisCode->toString() << endl;
         if (true) {
             MIPS_PRINT("############ " << thisCode->toString())
         }
@@ -42,7 +42,7 @@ void MipsTranslator::translate() {
         isImm1 = false, isImm2 = false, isGlobal = false;
         if (thisOp == OpBEZ || thisOp == OpBNEZ) {
             continue;
-        } else if (thisOp == OpFunc) {
+        } else if (thisOp == OpFunc){
             if (!hasNotMeetFunc) {
                 MIPS_CODE("jr\t$ra")
             }

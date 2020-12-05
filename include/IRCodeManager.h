@@ -23,10 +23,11 @@ class IRCodeManager {
 private:
     explicit IRCodeManager(ofstream &tmpCodeFile);
 
-    ofstream &ircodeFile;
     list<ThreeAddCode *> threeAddCodeList;
     list<stringData> stringDataList;
 public:
+    ofstream &ircodeFile;
+
     static IRCodeManager &getInstance(ofstream &tmpCodeFile);
 
     void addThreeAddCode(ThreeAddCode *code);

@@ -839,8 +839,10 @@ SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
         bool op2isInt = (tmpType == CHAR || tmpType == INT);
         if (op1isInt && op2isInt) {
             STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, exp_int)
+            op1isInt = false;
         } else if (op1isInt && !op2isInt) {
             STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, op2)
+            op1isInt = false;
         } else if (!op1isInt && op2isInt) {
             STORE_EXP(isMult ? OpMULT : OpDIV, op1, exp_int)
         } else {
