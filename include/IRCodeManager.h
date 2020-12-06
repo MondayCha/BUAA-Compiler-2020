@@ -37,6 +37,8 @@ public:
     list<ThreeAddCode *> getThreeAddCodeList();
 
     list<stringData> getStringDataList();
+
+//    void updateLastCode(string &ans);
 };
 
 struct GoalObject {

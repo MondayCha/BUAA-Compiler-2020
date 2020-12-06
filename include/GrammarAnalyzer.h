@@ -13,6 +13,7 @@
 
 
 //#define CLOSE_GRAMMER_OUTPUT
+#define CODE_OPTIMIZE_ON
 
 #define GET_TOKEN lexer.getNextToken()
 

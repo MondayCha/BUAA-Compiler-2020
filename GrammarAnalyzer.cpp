@@ -768,8 +768,64 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str) {
 // 返回INTVAR: 复合个int类型/变量
 // 返回VOID: 空
 SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
-    SymbolType returnValue = VOID;
-    bool calculate = false;
+#ifdef CODE_OPTIMIZE_ON
+    SymbolType itemType = VOID;     // 返回的表达式类型值
+    bool containAddSub = false;     // 包含计算类型
+    bool isMinus = false;           // 第一项之前为-
+    bool expHasVar = true;         // op1存储了表达式之前的变量结果
+    int expConstValue = 0;          // 表达式的常数部分
+    string ans, op1, op2;           // ans:结果 op1:操作数1 op2:操作数2
+    if (TYPE_ADDE) {
+        containAddSub = true;
+        isMinus = (TOKEN_TYPE == MINU);
+        PRINT_GET
+    }
+    // 读取表达式的第一项到op1
+    itemType = itemAnalyzer(op1, exp_int);  // expHasVar = true;
+    if (itemType == CHAR || itemType == INT) {  // 是常量
+        expHasVar = false;
+        expConstValue = (containAddSub && isMinus) ? -exp_int : exp_int; // 第一项之前为+或-, 字符类型修改为int类型
+    } else if (isMinus) {   // 是变量并且第一项之前为-, 需要更新op1的值
+        STORE_EXP(OpMINU, 0, op1)
+    }
+    while (TYPE_ADDE) {
+        containAddSub = true;
+        isMinus = (TOKEN_TYPE == MINU);
+        PRINT_GET
+        itemType = itemAnalyzer(op2, exp_int);
+        if (itemType == CHAR || itemType == INT) {  // 是常量
+            expConstValue += isMinus ? (-exp_int) : (exp_int);
+        } else {                                    // 是变量
+            if (expHasVar) {
+                STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, op2)
+            } else {
+                expHasVar = true;
+                if (isMinus) {
+                    STORE_EXP(OpMINU, 0, op2)
+                } else {
+                    op1 = move(op2);
+                }
+            }
+        }
+    }
+    if (expHasVar && expConstValue != 0) {
+        STORE_EXP(OpPLUS, op1, expConstValue)
+    }
+    exp_str = op1;
+    PRINT_MES(("<表达式>"))
+    if (containAddSub) {
+        if (expHasVar) {
+            return INTVAR;
+        } else {
+            exp_int = expConstValue;
+            return INT;
+        }
+    } else {
+        return itemType;
+    }
+#elif
+    SymbolType itemType = VOID;
+    bool containAddSub = false;
     bool firstAddSub = false;
     bool isMinus = false;
     if (TYPE_ADDE) {
@@ -778,40 +834,40 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
         firstAddSub = true;
     }
     string ans, op1, op2;
-    returnValue = itemAnalyzer(op1, exp_int);
-    bool op1isInt = (returnValue == CHAR || returnValue == INT);
+    itemType = itemAnalyzer(op1, exp_int);
+    bool op1isConst = (itemType == CHAR || itemType == INT);
     int op1Int = exp_int;
-    if (firstAddSub && (returnValue == CHAR || returnValue == CHARVAR)) {
-        calculate = true;
-        if (returnValue == CHAR) {
+    if (firstAddSub && (itemType == CHAR || itemType == CHARVAR)) {
+        containAddSub = true;
+        if (itemType == CHAR) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, 0, exp_int)
         } else {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, 0, op1)
         }
-        op1isInt = false;
+        op1isConst = false;
     } else if (firstAddSub && isMinus) {
-        if (op1isInt) {
+        if (op1isConst) {
             exp_int = -exp_int;
             op1Int = exp_int;
             op1 = to_string(exp_int);
         } else {
-            calculate = true;
+            containAddSub = true;
             STORE_EXP(OpMINU, 0, op1)
         }
     }
     while (TYPE_ADDE) {
         isMinus = (TOKEN_TYPE == MINU);
         PRINT_GET
-        calculate = true;
+        containAddSub = true;
         SymbolType tmpType = itemAnalyzer(op2, exp_int);
         bool op2isInt = (tmpType == CHAR || tmpType == INT);
-        if (op1isInt && op2isInt) {
+        if (op1isConst && op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, exp_int)
-            op1isInt = false;
-        } else if (op1isInt && !op2isInt) {
+            op1isConst = false;
+        } else if (op1isConst && !op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1Int, op2)
-            op1isInt = false;
-        } else if (!op1isInt && op2isInt) {
+            op1isConst = false;
+        } else if (!op1isConst && op2isInt) {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, exp_int)
         } else {
             STORE_EXP(isMinus ? OpMINU : OpPLUS, op1, op2)
@@ -819,11 +875,13 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
     }
     exp_str = op1;
     PRINT_MES(("<表达式>"))
-    return calculate ? INTVAR : returnValue;
+    return containAddSub ? INTVAR : itemType;
+#endif
 }
 
 /*＜项＞     ::= ＜因子＞{＜乘法运算符＞＜因子＞}*/
 SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
+#ifdef CODE_OPTIMIZE_ON
     string ans, op1, op2;
     bool isMult = false;
     // ＜因子＞
@@ -852,6 +910,36 @@ SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
     exp_str = op1;
     PRINT_MES(("<项>"))
     return returnValue;
+#elif
+    string ans, op1, op2;
+    bool isMult = false;
+    // ＜因子＞
+    SymbolType returnValue = factorAnalyzer(op1, exp_int);
+    bool op1isInt = (returnValue == CHAR || returnValue == INT);
+    int op1Int = exp_int;
+    // {＜乘法运算符＞＜因子＞}
+    while (TOKEN_TYPE == MULT || TOKEN_TYPE == DIV) {
+        isMult = (TOKEN_TYPE == MULT);
+        PRINT_GET
+        returnValue = INTVAR;
+        SymbolType tmpType = factorAnalyzer(op2, exp_int);
+        bool op2isInt = (tmpType == CHAR || tmpType == INT);
+        if (op1isInt && op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, exp_int)
+            op1isInt = false;
+        } else if (op1isInt && !op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1Int, op2)
+            op1isInt = false;
+        } else if (!op1isInt && op2isInt) {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1, exp_int)
+        } else {
+            STORE_EXP(isMult ? OpMULT : OpDIV, op1, op2)
+        }
+    }
+    exp_str = op1;
+    PRINT_MES(("<项>"))
+    return returnValue;
+#endif
 }
 
 /* ＜因子＞    ::=
@@ -1060,7 +1148,12 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
                 ADD_MIDCODE(OpAssArray, lower_name, array_index, exp_string)
             }
         } else {
+//#ifdef CODE_OPTIMIZE_ON
+//            // 消去最后一个临时变量
+//            irCode.updateLastCode(lower_name);
+//#elif
             ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
+//#endif
         }
     }
     PRINT_MES(("<赋值语句>"))

@@ -52,11 +52,11 @@ void MipsTranslator::translate() {
             MIPS_PRINT("f_" << mips_p_current_func->lowerName << ":")
             if (mips_p_current_func->symbolType == MAIN) {
                 MIPS_CODE("move\t$fp,\t$sp")
-                MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(-4 * (mips_p_current_func->funcSpace) - 8))
+                MIPS_CODE("addiu\t$sp,\t$sp,\t" << to_string(-4 * (mips_p_current_func->funcSpace) - 8))
             }
             mips_search_map = &(mips_p_current_func->funcLocalTable);
         } else if (thisOp == OpScanf) {
-            VarSym *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map,
+            auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map,
                                                                  RD1.str, isGlobal);
             if (varSym->symbolType == INT) {
                 MIPS_CODE("li\t\t$v0,\t5")
@@ -99,10 +99,10 @@ void MipsTranslator::translate() {
                 MIPS_CODE("sw\t\t$t1,\t" << to_string(addr) << "(" << pp_reg << ")")
             } else {
                 int addr = isGo ? (varSym->offset * 4) : -(varSym->offset * 4);
-                MIPS_CODE("addi\t$t2,\t" << pp_reg << ",\t" << to_string(addr))
+                MIPS_CODE("addiu\t$t2,\t" << pp_reg << ",\t" << to_string(addr))
                 MIPS_CODE("sll\t\t$t0,\t$t0,\t2")
                 if (isGo) {
-                    MIPS_CODE("add\t\t$t2,\t$t2,\t$t0")
+                    MIPS_CODE("addu\t\t$t2,\t$t2,\t$t0")
                 } else {
                     MIPS_CODE("sub\t\t$t2,\t$t2,\t$t0")
                 }
@@ -118,10 +118,10 @@ void MipsTranslator::translate() {
                 MIPS_CODE("lw\t\t$t1,\t" << to_string(addr) << "(" << pp_reg << ")")
             } else {
                 int addr = isGlobal ? (varSym->offset * 4) : -(varSym->offset * 4);
-                MIPS_CODE("addi\t$t2,\t" << pp_reg << ",\t" << to_string(addr))
+                MIPS_CODE("addiu\t$t2,\t" << pp_reg << ",\t" << to_string(addr))
                 MIPS_CODE("sll\t\t$t0,\t$t0,\t2")
                 if (isGlobal) {
-                    MIPS_CODE("add\t\t$t2,\t$t2,\t$t0")
+                    MIPS_CODE("addu\t\t$t2,\t$t2,\t$t0")
                 } else {
                     MIPS_CODE("sub\t\t$t2,\t$t2,\t$t0")
                 }
@@ -134,11 +134,11 @@ void MipsTranslator::translate() {
             if (isImm1 && isImm2) {
                 MIPS_CODE("li\t\t$t2,\t" << to_string(value1 + value2))
             } else if (!isImm1 && isImm2) {
-                MIPS_CODE("addi\t$t2,\t$t0,\t" << to_string(value2))
+                MIPS_CODE("addiu\t$t2,\t$t0,\t" << to_string(value2))
             } else if (isImm1 && !isImm2) {
-                MIPS_CODE("addi\t$t2,\t$t1,\t" << to_string(value1))
+                MIPS_CODE("addiu\t$t2,\t$t1,\t" << to_string(value1))
             } else {
-                MIPS_CODE("add\t\t$t2,\t$t0,\t$t1")
+                MIPS_CODE("addu\t\t$t2,\t$t0,\t$t1")
             }
             saveValue(RD1.str, $t2);
         } else if (thisOp == OpMINU) {
@@ -147,10 +147,10 @@ void MipsTranslator::translate() {
             if (isImm1 && isImm2) {
                 MIPS_CODE("li\t\t$t2,\t" << to_string(value1 - value2))
             } else if (!isImm1 && isImm2) {
-                MIPS_CODE("addi\t$t2,\t$t0,\t" << to_string(-value2))
+                MIPS_CODE("addiu\t$t2,\t$t0,\t" << to_string(-value2))
             } else if (isImm1 && !isImm2) {
                 MIPS_CODE("sub\t\t$t1,\t$0,\t$t1")
-                MIPS_CODE("addi\t$t2,\t$t1,\t" << to_string(value1))
+                MIPS_CODE("addiu\t$t2,\t$t1,\t" << to_string(value1))
             } else {
                 MIPS_CODE("sub\t\t$t2,\t$t0,\t$t1")
             }
@@ -230,14 +230,14 @@ void MipsTranslator::translate() {
                 MIPS_CODE("sw\t\t$t0,\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
             }
             int funcOffset = 4 * callFuncPtr->funcSpace + 8;
-            MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(-funcOffset))
+            MIPS_CODE("addiu\t$sp,\t$sp,\t" << to_string(-funcOffset))
             MIPS_CODE("sw\t\t$ra,\t4($sp)")
             MIPS_CODE("sw\t\t$fp,\t8($sp)")
-            MIPS_CODE("addi\t$fp,\t$sp,\t" << to_string(funcOffset))
+            MIPS_CODE("addiu\t$fp,\t$sp,\t" << to_string(funcOffset))
             MIPS_CODE("jal\t\tf_" << RD1.str)
             MIPS_CODE("lw\t\t$fp,\t8($sp)")
             MIPS_CODE("lw\t\t$ra,\t4($sp)")
-            MIPS_CODE("addi\t$sp,\t$sp,\t" << to_string(funcOffset))
+            MIPS_CODE("addiu\t$sp,\t$sp,\t" << to_string(funcOffset))
         }
     }
 
@@ -245,7 +245,7 @@ void MipsTranslator::translate() {
 
 void MipsTranslator::saveValue(string &obj, const string &regName) {
     bool isGlobal = false;
-    VarSym *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, obj, isGlobal);
+    auto *varSym = (VarSym *) symbolTable.getSymbolPtr(mips_search_map, obj, isGlobal);
     int address = isGlobal ? (varSym->offset * 4) : -(varSym->offset * 4);
     string pp_reg = p_reg;
     MIPS_CODE("sw\t\t" << regName << ",\t" << to_string(address) << "(" << pp_reg << ")")

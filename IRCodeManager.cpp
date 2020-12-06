@@ -41,6 +41,11 @@ void IRCodeManager::addStringData(stringData pronString) {
     stringDataList.push_back(pronString);
 }
 
+//void IRCodeManager::updateLastCode(string &ans) {
+//    ThreeAddCode *p_code = threeAddCodeList.back();
+//    p_code->setObj(0, ans);
+//}
+
 string ThreeAddCode::toString() {
     string ans = opTypeToString(op);
     for (int i = 0; i < 3; i++) {
