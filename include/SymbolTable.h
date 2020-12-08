@@ -43,8 +43,6 @@ public:
 
     void insertSymbolToLocal(Symbol *symbol);
 
-    string insertTempSymToLocal(string &tmpName, SymbolType symType, int pronOffset);
-
     void insertFuncToGlobal(FuncSym *funcSym);
 
     void endGlobalIdenSymbol();

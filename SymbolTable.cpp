@@ -39,15 +39,6 @@ void SymbolTable::insertSymbolToLocal(Symbol *symbol) {
     localIdenTable.insert({symbol->lowerName, symbol});
 }
 
-string SymbolTable::insertTempSymToLocal(string &tmpName, SymbolType symType, int pronOffset) {
-    if (hasIdenName(tmpName)) {
-        return insertTempSymToLocal(string("t_").append(tmpName), symType, pronOffset);
-    }
-    insertSymbolToLocal(
-            new VarSym(tmpName, tmpName, symType, 0, 0, 0, pronOffset));
-    return tmpName;
-}
-
 void SymbolTable::endGlobalIdenSymbol() {
     globalIdenTable = move(localIdenTable);
 }

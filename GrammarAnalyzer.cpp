@@ -8,6 +8,7 @@
 
 SymbolType grammar_func_with_return;
 bool grammar_state_with_return;
+bool grammar_create_tmp_var;
 int grammar_var_offset;
 bool grammar_meet_main;
 
@@ -16,6 +17,7 @@ GrammarAnalyzer::GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, Erro
         : lexer(pronLexer), symbolTable(pronSymbol), errorHandle(pronError), irCode(pronCode), outFile(pronFile) {
     grammar_func_with_return = VOID;
     grammar_state_with_return = false;
+    grammar_create_tmp_var = false;
     grammar_var_offset = 0;
     grammar_meet_main = false;
 }
@@ -818,12 +820,13 @@ SymbolType GrammarAnalyzer::expressionAnalyzer(string &exp_str, int &exp_int) {
             return INTVAR;
         } else {
             exp_int = expConstValue;
+            exp_str = to_string(expConstValue);
             return INT;
         }
     } else {
         return itemType;
     }
-#elif
+#else
     SymbolType itemType = VOID;
     bool containAddSub = false;
     bool firstAddSub = false;
@@ -910,7 +913,7 @@ SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
     exp_str = op1;
     PRINT_MES(("<项>"))
     return returnValue;
-#elif
+#else
     string ans, op1, op2;
     bool isMult = false;
     // ＜因子＞
@@ -951,53 +954,53 @@ SymbolType GrammarAnalyzer::itemAnalyzer(string &exp_str, int &exp_int) {
  * ＜字符＞｜
  * ＜有返回值函数调用语句＞*/
 SymbolType GrammarAnalyzer::factorAnalyzer(string &exp_str, int &exp_int) {
-    SymbolType returnValue = VOID;
+    SymbolType returnType = VOID;
     if (TOKEN_TYPE == LPARENT) {
         // '('＜表达式＞')'
         PRINT_GET
         SymbolType sy = expressionAnalyzer(exp_str, exp_int);
         CHECK_RPARENT
         // 字符型一旦参与运算则转换成整型，包括小括号括起来的字符型，也算参与了运算，例如(‘c’)的结果是整型
-        returnValue = (sy == CHAR) ? INTVAR : sy;
+        returnType = (sy == CHAR) ? INTVAR : sy;
     } else if (TOKEN_TYPE == IDENFR) {
         string lower_name = LEX_LONA;
         PRINT_GET
         if (TOKEN_TYPE == LBRACK) {
             // ＜标识符＞'['＜表达式＞']''['＜表达式＞']'
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
-            returnValue = symbolTable.getIdenType(lower_name);
+            returnType = symbolTable.getIdenType(lower_name);
             exp_str = arrayExpAssignAnalyzer(lower_name);
         } else if (TOKEN_TYPE == LPARENT) {
             // ＜有返回值函数调用语句＞
-            returnValue = functionCallAnalyzer(lower_name);
-            exp_str = genTmpVar_and_insert(returnValue);
-            ADD_MIDCODE(OpRetVar, returnValue, exp_str, "")
+            returnType = functionCallAnalyzer(lower_name);
+            exp_str = genTmpVar_and_insert(returnType);
+            ADD_MIDCODE(OpRetVar, exp_str, returnType, "")
         } else {
             errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
-            returnValue = symbolTable.getIdenType(lower_name);
+            returnType = symbolTable.getIdenType(lower_name);
             exp_str = LEX_LONA;
         }
-        if (returnValue == INT) {
-            returnValue = INTVAR;
-        } else if (returnValue == CHAR) {
-            returnValue = CHARVAR;
+        if (returnType == INT) {
+            returnType = INTVAR;
+        } else if (returnType == CHAR) {
+            returnType = CHARVAR;
         }
     } else if (TOKEN_TYPE == CHARCON) {
         exp_int = lexer.lexToken.contentNum;
         exp_str = to_string(exp_int);
         PRINT_GET
-        returnValue = CHAR;
+        returnType = CHAR;
     } else {
         bool isInteger = false;
         exp_int = integerAnalyzer(isInteger);
         exp_str = to_string(exp_int);
         if (isInteger) {
-            returnValue = INT;
+            returnType = INT;
         }
         // check
     }
     PRINT_MES(("<因子>"))
-    return returnValue;
+    return returnType;
 }
 
 /*＜条件语句＞  ::= if '('＜条件＞')'＜语句＞［else＜语句＞］*/
@@ -1129,6 +1132,7 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
     CHECK_GET(ASSIGN, "ASSIGN =");
     string exp_string;
     int exp_int;
+    grammar_create_tmp_var = false;
     SymbolType tType = expressionAnalyzer(exp_string, exp_int);
     if (tType == CHAR || tType == INT) {
         if (isArray) {
@@ -1148,12 +1152,16 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
                 ADD_MIDCODE(OpAssArray, lower_name, array_index, exp_string)
             }
         } else {
-//#ifdef CODE_OPTIMIZE_ON
-//            // 消去最后一个临时变量
-//            irCode.updateLastCode(lower_name);
-//#elif
+#ifdef CODE_OPTIMIZE_ON
+            // 消去最后一个临时变量
+            if (grammar_create_tmp_var) {
+                irCode.updateLastCode(lower_name);
+            } else {
+                ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
+            }
+#else
             ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
-//#endif
+#endif
         }
     }
     PRINT_MES(("<赋值语句>"))
@@ -1187,9 +1195,9 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
             errorHandle.printErrorOfReturnMatch(LEX_LINE);
         }
         if (exp_type == INT && exp_type == CHAR) {
-            ADD_MIDCODE(OpReturn, expType, exp_int, "")
+            ADD_MIDCODE(OpReturn, exp_int, expType, "")
         } else {
-            ADD_MIDCODE(OpReturn, expType, exp_str, "")
+            ADD_MIDCODE(OpReturn, exp_str, expType, "")
         }
         addReturnMidcode = true;
         // RETURN
@@ -1200,7 +1208,7 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
     if (grammar_meet_main) {
         ADD_MIDCODE(OpExit, "", "", "")
     } else if (addReturnMidcode == false) {
-        ADD_MIDCODE(OpReturn, VOID, "", "")
+        ADD_MIDCODE(OpReturn, "", VOID, "")
     }
     grammar_state_with_return = true;
     PRINT_MES(("<返回语句>"))
@@ -1513,9 +1521,11 @@ int GrammarAnalyzer::getNeedSpace(int level, int length1, int length2) {
 
 string GrammarAnalyzer::genTmpVar_and_insert(SymbolType symType) {
     static int index = -1;
-    string ans = "tmp_" + to_string(++index);
-    ans = symbolTable.insertTempSymToLocal(ans, symType, grammar_var_offset);
+    string ans = "@" + to_string(++index);
+    Symbol *p_sym = new VarSym(ans, ans, symType, 0, 0, 0, grammar_var_offset);
+    symbolTable.insertSymbolToLocal(p_sym);
     grammar_var_offset++;
+    grammar_create_tmp_var = true;
     // cout << "/////////////////// gen tmp named " << ans << " and offset is " << to_string(grammar_var_offset) << endl;
     return ans;
 }

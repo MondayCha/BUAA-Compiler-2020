@@ -38,7 +38,7 @@ public:
 
     list<stringData> getStringDataList();
 
-//    void updateLastCode(string &ans);
+    bool updateLastCode(string &ans);
 };
 
 struct GoalObject {
@@ -50,7 +50,6 @@ struct GoalObject {
 
 class ThreeAddCode {
 private:
-
     OperatorType op;
     GoalObject obj[3];
     ThreeAddCode *p_next = nullptr;
@@ -81,6 +80,10 @@ public:
     ThreeAddCode(OperatorType op, string rrd, int rrs, string rrt);
 
     ThreeAddCode(OperatorType op, string rrd, int rrs, int rrt);
+
+    ThreeAddCode(OperatorType op, string rrd, SymbolType rrs, string rrt);
+
+    ThreeAddCode(OperatorType op, int rrd, SymbolType rrs, string rrt);
 
     string toString();
 

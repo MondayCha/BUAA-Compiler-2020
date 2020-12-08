@@ -41,10 +41,14 @@ void IRCodeManager::addStringData(stringData pronString) {
     stringDataList.push_back(pronString);
 }
 
-//void IRCodeManager::updateLastCode(string &ans) {
-//    ThreeAddCode *p_code = threeAddCodeList.back();
-//    p_code->setObj(0, ans);
-//}
+bool IRCodeManager::updateLastCode(string &ans) {
+    ThreeAddCode *p_code = threeAddCodeList.back();
+    if (p_code->obj[0].type == INTTMP) {
+
+    }
+    p_code->setObj(0, ans);
+    return true;
+}
 
 string ThreeAddCode::toString() {
     string ans = opTypeToString(op);
@@ -105,6 +109,14 @@ ThreeAddCode::ThreeAddCode(OperatorType op, string rrd, int rrs, string rrt) : o
 }
 
 ThreeAddCode::ThreeAddCode(OperatorType op, string rrd, int rrs, int rrt) : op(op) {
+    INIT_THREE_ADD_CODE
+}
+
+ThreeAddCode::ThreeAddCode(OperatorType op, string rrd, SymbolType rrs, string rrt) : op(op) {
+    INIT_THREE_ADD_CODE
+}
+
+ThreeAddCode::ThreeAddCode(OperatorType op, int rrd, SymbolType rrs, string rrt) : op(op) {
     INIT_THREE_ADD_CODE
 }
 

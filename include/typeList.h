@@ -91,6 +91,7 @@ enum SymbolType {
     CHAR, INT, VOID,
     MAIN,
     CHARVAR, INTVAR,
+    INTTMP
 };
 
 /////////////////////////////////////////////////

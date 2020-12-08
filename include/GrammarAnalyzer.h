@@ -52,7 +52,7 @@ PRINT_G_SEM\
 }
 
 #define STORE_EXP(opType, obj1, obj2) \
-ans = genTmpVar_and_insert(INT);           \
+ans = genTmpVar_and_insert(INTTMP);           \
 irCode.addThreeAddCode(new ThreeAddCode(opType, ans, obj1, obj2));\
 op1 = move(ans);
 

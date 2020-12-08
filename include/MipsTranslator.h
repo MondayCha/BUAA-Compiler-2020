@@ -25,18 +25,18 @@
 #define $fp reg_fp
 #define $v0 reg_v0
 
-#define CONDITION(condition,str1,str2,str3,str4)\
+#define CONDITION(condition, str1, str2, str3, str4)\
 if (branch_when_true) {\
 if (isImm1 && isImm2) {\
 if (condition) {\
 MIPS_CODE("j\t" << (thisCode->p_next->obj[0].str))\
 }\
 } else if (!isImm1 && isImm2) {\
-MIPS_CODE(str1 << "\t\t$t0,\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str1 << "\t\t" << rs2s << ",\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
 } else if (isImm1 && !isImm2) {\
-MIPS_CODE(str2 << "\t\t$t1,\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str2 << "\t\t" << rt3s << ",\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
 } else {\
-MIPS_CODE(str1 << "\t\t$t0,\t$t1,\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str1 << "\t\t" << rs2s << ",\t" << rt3s << ",\t" << (thisCode->p_next->obj[0].str))\
 }\
 } else {\
 if (isImm1 && isImm2) {\
@@ -44,23 +44,23 @@ if (!(condition)) {\
 MIPS_CODE("j\t" << (thisCode->p_next->obj[0].str))\
 }\
 } else if (!isImm1 && isImm2) {\
-MIPS_CODE(str3 << "\t\t$t0,\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str3 << "\t\t" << rs2s << ",\t" << to_string(value2) << ",\t" << (thisCode->p_next->obj[0].str))\
 } else if (isImm1 && !isImm2) {\
-MIPS_CODE(str4 << "\t\t$t1,\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str4 << "\t\t" << rt3s << ",\t" << to_string(value1) << ",\t" << (thisCode->p_next->obj[0].str))\
 } else {\
-MIPS_CODE(str3 << "\t\t$t0,\t$t1,\t" << (thisCode->p_next->obj[0].str))\
+MIPS_CODE(str3 << "\t\t" << rs2s << ",\t" << rt3s << ",\t" << (thisCode->p_next->obj[0].str))\
 }\
 }
 
 class MipsTranslator {
 private:
-    const string reg_t0 = "$t0";
-    const string reg_t1 = "$t1";
-    const string reg_t2 = "$t2";
-    const string reg_a0 = "$a0";
-    const string reg_gp = "$gp";
-    const string reg_fp = "$fp";
-    const string reg_v0 = "$v0";
+    string reg_t0 = "$t0";
+    string reg_t1 = "$t1";
+    string reg_t2 = "$t2";
+    string reg_a0 = "$a0";
+    string reg_gp = "$gp";
+    string reg_fp = "$fp";
+    string reg_v0 = "$v0";
 
     explicit MipsTranslator(ofstream &mipsFile, IRCodeManager &irCode, SymbolTable &symbolTable);
 
@@ -69,11 +69,20 @@ private:
     SymbolTable &symbolTable;
 public:
     static MipsTranslator &getInstance(ofstream &mipsFile, IRCodeManager &irCode, SymbolTable &symbolTable);
+
     void translate();
 
-    void loadValue(GoalObject &goalObject, const string& regName, bool ifGen, bool &isImm, int &value);
+    void loadValue(GoalObject &goalObject, string &regName, bool ifGen, bool &isImm, int &value);
 
-    void saveValue(string &obj, const string& regName);
+    void saveValue(string &obj, const string &regName);
+
+    int getTRegName(string &name);
+
+    int getTRegFree(string &name);
+
+    int getSRegName(string &name);
+
+    int getSRegFree(string &name);
 };
 
 
