@@ -8,8 +8,8 @@
 #include "IRCodeManager.h"
 #include "SymbolTable.h"
 
-#define MIPS_PRINT(word) mipsFile << word << endl;
-#define MIPS_CODE(code) mipsFile << "\t" << code << endl;
+#define MIPS_PRINT(word) mipsFile << word << "\n";
+#define MIPS_CODE(code) mipsFile << "\t" << code << "\n";
 
 #define p_reg (isGlobal ? $gp : $fp)
 

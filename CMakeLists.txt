@@ -17,4 +17,4 @@ add_executable(MyCompiler
         Lexer.cpp
         main.cpp
         SymbolTable.cpp
-        IRCodeManager.cpp MipsTranslator.cpp include/MipsTranslator.h)
+        IRCodeManager.cpp MipsTranslator.cpp include/MipsTranslator.h ActiveOptimize.cpp include/ActiveOptimize.h)
