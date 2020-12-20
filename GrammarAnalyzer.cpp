@@ -654,37 +654,19 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
     if (TOKEN_TYPE == WHILETK) {
         PRINT_GET
         CHECK_GET(LPARENT, "whileStatementAnalyzer()");
-        string condition_var, label1, label2; /*, label3*/
-//        ThreeAddCode *p_con_begin, *p_con_end, *p_con_curr, *p_code;
-        label1 = genLabel("w_cmp_");
+        string condition_var, label1, label2;
+        label1 = genLabel();
         ADD_MIDCODE(OpLabel, label1, "", "")
-//        p_con_begin = grammar_current_func_ptr->funcIRCodeList.back();
         conditionAnalyzer(condition_var);
-//        p_con_end = grammar_current_func_ptr->funcIRCodeList.back();
         CHECK_RPARENT
-        label2 = genLabel("w_end_");
+        label2 = genLabel();
         ADD_MIDCODE(OpBEZ, label2, condition_var, "")
-//        label3 = genLabel("w_body_");
-//        ADD_MIDCODE(OpLabel, label3, "", "")
         statementAnalyzer();
         ADD_MIDCODE(OpJmp, label1, "", "")
-        // copy for-compare
-//        for (p_con_curr = p_con_begin->p_next;
-//             p_con_curr != p_con_end->p_next && p_con_curr != nullptr; p_con_curr = p_con_curr->p_next) {
-//            p_code = p_con_curr->copy();
-//            for (auto &i : p_code->obj) {
-//                if (i.str[0] == '@') {
-//                    i.str = genLoopVar(i.str);
-//                }
-//            }
-//            grammar_current_func_ptr->addThreeAddCode(p_code);
-//        }
-//        ADD_MIDCODE(OpBNEZ, label3, condition_var + ")", "")
         ADD_MIDCODE(OpLabel, label2, "", "")
     } else if (TOKEN_TYPE == FORTK) {
         string lowerName1, lowerName2, lowerName3;
-        string exp_str, for_var, label1, label2; /*, label3*/
-//        ThreeAddCode *p_con_begin, *p_con_end, *p_con_curr, *p_code;
+        string exp_str, for_var, label1, label2;
         SymbolType exp_type;
         int exp_int;
         //for
@@ -692,12 +674,10 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         //'('
         CHECK_GET(LPARENT, "forStatementAnalyzer (");
         lowerName1 = LEX_LONA; //＜标识符＞
-#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
         errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
-#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer ");
         CHECK_GET(ASSIGN, "forStatementAnalyzer ="); //＝
         //for'('＜标识符＞＝＜表达式＞
@@ -707,32 +687,26 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         } else {
             ADD_MIDCODE(OpASSIGN, lowerName1, exp_str, "")
         }
-        label1 = genLabel("f_cmp_");
+        label1 = genLabel();
         ADD_MIDCODE(OpLabel, label1, "", "")
         CHECK_SEMICN //;
-//        p_con_begin = grammar_current_func_ptr->funcIRCodeList.back();
         conditionAnalyzer(for_var);
-//        p_con_end = grammar_current_func_ptr->funcIRCodeList.back();
-        label2 = genLabel("f_end_");
+        label2 = genLabel();
         ADD_MIDCODE(OpBEZ, label2, for_var, "")
         CHECK_SEMICN //;
         //＜标识符＞
         lowerName2 = LEX_LONA;
-#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
         errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
-#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //＝
         CHECK_GET(ASSIGN, "forStatementAnalyzer()");
         //＜标识符＞
         lowerName3 = LEX_LONA;
-#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
-#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         int stepSize;
         bool isPlus = true;
@@ -747,22 +721,9 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         stepSize = unsignedIntAnalyzer();
         PRINT_MES(("<步长>"))
         CHECK_RPARENT
-//        label3 = genLabel("f_body_");
-//        ADD_MIDCODE(OpLabel, label3, "", "")
         // ＜语句＞
         statementAnalyzer();
         ADD_MIDCODE(isPlus ? OpPLUS : OpMINU, lowerName2, lowerName3, stepSize)
-//        for (p_con_curr = p_con_begin->p_next;
-//             p_con_curr != p_con_end->p_next && p_con_curr != nullptr; p_con_curr = p_con_curr->p_next) {
-//            p_code = p_con_curr->copy();
-//            for (auto &i : p_code->obj) {
-//                if (i.str[0] == '@') {
-//                    i.str = genLoopVar(i.str);
-//                }
-//            }
-//            grammar_current_func_ptr->addThreeAddCode(p_code);
-//        }
-//        ADD_MIDCODE(OpBNEZ, label3, for_var + ")", "")
         ADD_MIDCODE(OpJmp, label1, "", "")
         ADD_MIDCODE(OpLabel, label2, "", "")
     }
@@ -1080,12 +1041,12 @@ void GrammarAnalyzer::conditionalStatementAnalyzer() {
     conditionAnalyzer(condition_var);
     CHECK_RPARENT
     string label_if_else, label_if_end;
-    label_if_else = genLabel("if");
+    label_if_else = genLabel();
     ADD_MIDCODE(OpBEZ, label_if_else, condition_var, "")
     statementAnalyzer();
     if (TOKEN_TYPE == ELSETK) {
         PRINT_GET
-        label_if_end = genLabel("if");
+        label_if_end = genLabel();
         ADD_MIDCODE(OpJmp, label_if_end, "", "")
         ADD_MIDCODE(OpLabel, label_if_else, "", "")
         statementAnalyzer();
@@ -1111,9 +1072,7 @@ string GrammarAnalyzer::arrayExpAssignAnalyzer(string &lower_name, bool genTmp, 
     int level = 1;
     SymbolType t1, t2;
     t1 = expressionAnalyzer(str_len1, exp_int1);
-#ifdef ERROR_HANDLE_ON
     errorHandle.checkArrayIndexNotInt(t1, LEX_LINE);
-#endif
     CHECK_RBRACK
     if (TOKEN_TYPE == LBRACK) {
         PRINT_GET
@@ -1227,7 +1186,7 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
 #ifdef CODE_OPTIMIZE_ON
             // 消去最后一个临时变量
             if (grammar_create_tmp_var) {
-//                irCode.updateLastCode(lower_name);
+                irCode.updateLastCode(lower_name);
                 grammar_current_func_ptr->updateLastCode(lower_name);
             } else {
                 ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
@@ -1555,7 +1514,7 @@ void GrammarAnalyzer::situationSwitchAnalyzer(SymbolType switchType, SymbolType 
         } else {
             ADD_MIDCODE(OpEQL, case_str, exp1_str, switchConstant);
         }
-        string next_case = genLabel("case");
+        string next_case = genLabel();
         ADD_MIDCODE(OpBEZ, next_case, case_str, "")
         statementAnalyzer();
         ADD_MIDCODE(OpJmp, end_label, "", "")
@@ -1637,22 +1596,8 @@ string GrammarAnalyzer::genSwitchTmpVar(SymbolType symType) {
     return ans;
 }
 
-string GrammarAnalyzer::genLoopVar(string &beforeName) {
-    bool isGlobal = false;
-    string ans = beforeName + ")";
-    Symbol *tp = symbolTable.getSymbolPtr(&(symbolTable.localIdenTable), beforeName, isGlobal);
-    Symbol *p_sym = new VarSym(ans, ans, tp->symbolType, 0, 0, 0, grammar_var_offset);
-    Symbol *tsp = symbolTable.getSymbolPtr(&(symbolTable.localIdenTable), ans, isGlobal);
-    if (tsp == nullptr) {
-        symbolTable.insertSymbolToLocal(p_sym);
-    }
-    grammar_var_offset++;
-    grammar_create_tmp_var = true;
-    return ans;
-}
-
-string GrammarAnalyzer::genLabel(const string &labelName) {
+string GrammarAnalyzer::genLabel() {
     static int label_index = -1;
-    string ans = "l_" + labelName + to_string(++label_index);
+    string ans = "label_" + to_string(++label_index);
     return ans;
 }

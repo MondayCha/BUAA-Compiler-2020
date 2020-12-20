@@ -211,10 +211,6 @@ void FuncSym::addCountOfVar(string &name) {
     }
 }
 
-ThreeAddCode *FuncSym::getLastCodePtr() {
-    return funcIRCodeList.back();
-}
-
 ConSym::ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent)
         : Symbol(
         pronName,

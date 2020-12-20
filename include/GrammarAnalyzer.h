@@ -16,7 +16,7 @@
 /////////////////////// 优化开关 //////////////////////
 //#define CLOSE_GRAMMER_OUTPUT
 #define CODE_OPTIMIZE_ON
-#define ERROR_HANDLE_ON
+// #define ERROR_HANDLE_ON
 ///////////////////////////////////////////////////////
 /////////////////////// 优化开关 //////////////////////
 
@@ -74,6 +74,7 @@ op1 = move(ans);
 #define PRINT_G_SEM errorHandle.printErrorLine('k', lexer.lastLineNum);
 #define ADD_MIDCODE(op,s1,s2,s3)\
 define_tmp_code_ptr = new ThreeAddCode(op,s1,s2,s3);\
+irCode.addThreeAddCode(define_tmp_code_ptr);\
 grammar_current_func_ptr->addThreeAddCode(define_tmp_code_ptr);
 
 #define ADD_FUNC(func_name) \
@@ -197,11 +198,9 @@ public:
 
     string arrayExpAssignAnalyzer(string &lower_name);
 
-    string genLabel(const string &labelName);
+    string genLabel();
 
     string genSwitchTmpVar(SymbolType symType);
-
-    string genLoopVar(string &beforeName);
 };
 
 #endif //SCANNER_GRAMMARANALYZER_H

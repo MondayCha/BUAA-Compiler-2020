@@ -12,10 +12,12 @@ int tRegBusy[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 int sRegBusy[9] = {0, 0, 0, 0, 0, 0, 0, 0};
 string tRegName[10];
 string sRegName[9];
+int divLabelOffset;
 
 MipsTranslator::MipsTranslator(ofstream &mipsFile, IRCodeManager &irCode, ActiveOptimize &pronActive,
                                SymbolTable &symbolTable)
         : mipsFile(mipsFile), irCode(irCode), activeOpt(pronActive), symbolTable(symbolTable) {
+    divLabelOffset = 0;
 }
 
 MipsTranslator &MipsTranslator::getInstance(ofstream &mipsFile, IRCodeManager &irCode, ActiveOptimize &pronActive,
@@ -59,7 +61,7 @@ void MipsTranslator::translateCode(FuncSym *funcPtr, const list<ThreeAddCode *> 
         OperatorType thisOp = thisCode->op;
         isImm1 = false, isImm2 = false, isGlobal = false, isDirty = false, saveToMemory = true;
         string rs2s = "$t0", rt3s = "$t1", rd1s = "$t2";
-        if (thisOp == OpBEZ || thisOp == OpBNEZ || thisOp == OpConst || thisOp == OpVar) {
+        if (thisOp == OpBEZ || thisOp == OpBNEZ) {
             continue;
         } else if (thisOp == OpPLUS) {
             loadValue(RS2, rs2s, false, isImm1, value1);
@@ -136,6 +138,8 @@ void MipsTranslator::translateCode(FuncSym *funcPtr, const list<ThreeAddCode *> 
             loadValue(RT3, rt3s, false, isImm2, value2);
             PMMD_REG_JUDGE
             // 常数传递
+//            MIPS_CODE("div\t\t" << rs2s << ",\t" << rt3s)
+//            MIPS_CODE("mflo\t" << rd1s)
             if (isImm1 && isImm2) {
                 MIPS_CODE("li\t\t" << rd1s << ",\t" << to_string(value1 / value2))
             } else if (!isImm1 && !isImm2) {
@@ -143,31 +147,39 @@ void MipsTranslator::translateCode(FuncSym *funcPtr, const list<ThreeAddCode *> 
                 MIPS_CODE("mflo\t" << rd1s)
             } else if (isImm1 && !isImm2) {
                 if (value1 == 0) {
-                    MIPS_CODE("li\t\t" << rd1s << ",\t0")
+                    MIPS_CODE("move\t" << rd1s << ",\t$0")
                 } else {
                     MIPS_CODE("li\t\t" << rs2s << ",\t" << to_string(value1))
                     MIPS_CODE("div\t\t" << rs2s << ",\t" << rt3s)
                     MIPS_CODE("mflo\t" << rd1s)
                 }
             } else {
-                MIPS_CODE("li\t\t" << rt3s << ",\t" << to_string(value2))
-                MIPS_CODE("div\t\t" << rs2s << ",\t" << rt3s)
-                MIPS_CODE("mflo\t" << rd1s)
-//                bool isImm2Gre = value2 > 0;
-//                unsigned int tmpDivValueAbs = isImm2Gre ? value2 : -value2;
-//                bool isTwoPower = (tmpDivValueAbs & (tmpDivValueAbs - 1)) == 0;
-//                if (tmpDivValueAbs == 0 || !isTwoPower) {
-//                } else {
-//                    // 获得一个整数的二进制位数
-//                    unsigned int binaryOfValue = 1;
-//                    while ((tmpDivValueAbs >> binaryOfValue) > 0) {
-//                        binaryOfValue++;
-//                    }
-//                    MIPS_CODE("sra\t\t" << rd1s << ",\t" << rs2s << ",\t" << to_string(binaryOfValue - 1))
-//                    if (!isImm2Gre) {
-//                        MIPS_CODE("sub\t\t" << rd1s << ",\t$0,\t" << rd1s)
-//                    }
-//                }
+                bool isImm2Gre = value2 > 0;
+                unsigned int tmpDivValueAbs = isImm2Gre ? value2 : -value2;
+                bool isTwoPower = (tmpDivValueAbs & (tmpDivValueAbs - 1)) == 0;
+                if (value2 == 1) {
+                    MIPS_CODE("move\t" << rd1s << ",\t" << rs2s)
+                } else if (value2 == 0 || !isTwoPower) {
+                    MIPS_CODE("li\t\t" << rt3s << ",\t" << to_string(value2))
+                    MIPS_CODE("div\t\t" << rs2s << ",\t" << rt3s)
+                    MIPS_CODE("mflo\t" << rd1s)
+                } else {
+                    string labelDiv = "l_div_" + to_string(divLabelOffset++);
+                    if (isImm2Gre) {
+                        MIPS_CODE("move\t$t0,\t" << rs2s)
+                    } else {
+                        MIPS_CODE("sub\t\t$t0,\t$0,\t" << rs2s)
+                    }
+                    MIPS_CODE("bgtz\t$t0,\t" << labelDiv)
+                    // 获得一个整数的二进制位数
+                    unsigned int binaryOfValue = 1;
+                    while ((tmpDivValueAbs >> binaryOfValue) > 0) {
+                        binaryOfValue++;
+                    }
+                    MIPS_CODE("addiu\t$t0,\t$t0,\t" << to_string(tmpDivValueAbs - 1))
+                    MIPS_PRINT(labelDiv << ":")
+                    MIPS_CODE("sra\t\t" << rd1s << ",\t$t0,\t" << to_string(binaryOfValue - 1))
+                }
             }
             if (saveToMemory) { saveValue(RD1.str, rd1s); }
         } else if (thisOp == OpLabel) {
@@ -356,18 +368,9 @@ void MipsTranslator::translateCode(FuncSym *funcPtr, const list<ThreeAddCode *> 
                 rs2s = "$t0";
                 paramsPtr = funcParamsStack.top();
                 funcParamsStack.pop();
-                loadValue(paramsPtr->obj[1], rs2s, false, isImm1, value1);
+                loadValue(paramsPtr->obj[1], rs2s, true, isImm1, value1);
                 callFuncParamsSize--;
-                if (isImm1) {
-                    if (value1 == 0) {
-                        MIPS_CODE("sw\t\t$0,\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
-                    } else {
-                        MIPS_CODE("li\t\t" << rs2s << ",\t" << to_string(value1))
-                        MIPS_CODE("sw\t\t" << rs2s << ",\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
-                    }
-                } else {
-                    MIPS_CODE("sw\t\t" << rs2s << ",\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
-                }
+                MIPS_CODE("sw\t\t" << rs2s << ",\t" << to_string(-4 * callFuncParamsSize) << "($sp)")
             }
             // 保存临时变量
             vector<string> funcVarList;

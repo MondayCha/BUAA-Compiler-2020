@@ -42,8 +42,8 @@ void IRCodeManager::addStringData(stringData pronString) {
 }
 
 bool IRCodeManager::updateLastCode(string &ans) {
-//    ThreeAddCode *p_code = threeAddCodeList.back();
-//    p_code->setObj(0, ans);
+    ThreeAddCode *p_code = threeAddCodeList.back();
+    p_code->setObj(0, ans);
     return true;
 }
 
@@ -174,9 +174,6 @@ void ThreeAddCode::setObj(int index, int pronNum) {
     obj[index].branch = 2;
 }
 
-ThreeAddCode::ThreeAddCode(OperatorType op) : op(op) {
-}
-
 ThreeAddCode::ThreeAddCode(OperatorType op, string rrd, string rrs, string rrt) : op(op) {
     INIT_THREE_ADD_CODE
 }
@@ -233,12 +230,4 @@ string ThreeAddCode::branchToString(int index) {
     } else {
         return "int/char: ";
     }
-}
-
-ThreeAddCode *ThreeAddCode::copy() {
-    auto *p = new ThreeAddCode(this->op);
-    p->obj[0].operator=(this->obj[0]);
-    p->obj[1].operator=(this->obj[1]);
-    p->obj[2].operator=(this->obj[2]);
-    return p;
 }

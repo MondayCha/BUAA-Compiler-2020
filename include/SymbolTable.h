@@ -120,8 +120,6 @@ public:
 
     void updateLastCode(string &ans);
 
-    ThreeAddCode * getLastCodePtr();
-
     void addCountOfVar(string &name);
 };
 
