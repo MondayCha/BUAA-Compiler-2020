@@ -8,8 +8,10 @@
 #include <iostream>
 #include <string>
 #include <map>
+#include <queue>
 #include <vector>
 #include "typeList.h"
+#include "IRCodeManager.h"
 
 using namespace std;
 
@@ -87,15 +89,40 @@ public:
            int pronOffset);
 };
 
+struct funcVar {
+    int count;
+    string name;
+
+    funcVar(int c, string n) {
+        count = c;
+        name = n;
+    }
+
+    bool operator<(const funcVar &a) const {
+        return count < a.count;
+    }
+};
+
 class FuncSym : public Symbol {
 public:
     vector<VarSym> parameters;
     map<string, Symbol *> funcLocalTable;
+    list<ThreeAddCode *> funcIRCodeList;
+    priority_queue<funcVar> varUseCountQueue;
+    map<string, int> varUseCountMap;
     int funcSpace;
 
     FuncSym(string &pronName, string &pronLowerName, SymbolType pronType);
 
     void setFuncLocalTable(map<string, Symbol *> pronTable);
+
+    void addThreeAddCode(ThreeAddCode *code);
+
+    void updateLastCode(string &ans);
+
+    ThreeAddCode * getLastCodePtr();
+
+    void addCountOfVar(string &name);
 };
 
 class ConSym : public Symbol {

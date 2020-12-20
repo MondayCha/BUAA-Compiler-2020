@@ -7,6 +7,7 @@
 
 #include "IRCodeManager.h"
 #include "SymbolTable.h"
+#include "ActiveOptimize.h"
 
 #define MIPS_PRINT(word) mipsFile << word << "\n";
 #define MIPS_CODE(code) mipsFile << "\t" << code << "\n";
@@ -17,13 +18,8 @@
 #define RS2 thisCode->obj[1]
 #define RT3 thisCode->obj[2]
 
-#define $t0 reg_t0
-#define $t1 reg_t1
-#define $t2 reg_t2
-#define $a0 reg_a0
 #define $gp reg_gp
 #define $fp reg_fp
-#define $v0 reg_v0
 
 #define CONDITION(condition, str1, str2, str3, str4)\
 if (branch_when_true) {\
@@ -52,27 +48,43 @@ MIPS_CODE(str3 << "\t\t" << rs2s << ",\t" << rt3s << ",\t" << (thisCode->p_next-
 }\
 }
 
+#define PMMD_REG_JUDGE \
+if (RD1.str[0] == '@') {\
+int rdRegNum = getTRegFree(RD1.str);\
+if (rdRegNum != -1) {\
+saveToMemory = false;   \
+rd1s = "$t" + to_string(rdRegNum);\
+}\
+} else {\
+int srdRegNum = getSRegName(RD1.str);\
+if(srdRegNum != -1) {\
+saveToMemory = false;\
+rd1s = "$s" + to_string(srdRegNum);\
+}\
+}\
+
 class MipsTranslator {
 private:
-    string reg_t0 = "$t0";
-    string reg_t1 = "$t1";
-    string reg_t2 = "$t2";
-    string reg_a0 = "$a0";
     string reg_gp = "$gp";
     string reg_fp = "$fp";
-    string reg_v0 = "$v0";
 
-    explicit MipsTranslator(ofstream &mipsFile, IRCodeManager &irCode, SymbolTable &symbolTable);
+    explicit MipsTranslator(ofstream &mipsFile, IRCodeManager &irCode, ActiveOptimize &pronActive, SymbolTable &symbolTable);
 
     ofstream &mipsFile;
     IRCodeManager &irCode;
+    ActiveOptimize &activeOpt;
     SymbolTable &symbolTable;
+
+    void translateCode(FuncSym *funcPtr, const list<ThreeAddCode *>& codeList);
+
 public:
-    static MipsTranslator &getInstance(ofstream &mipsFile, IRCodeManager &irCode, SymbolTable &symbolTable);
+    static MipsTranslator &getInstance(ofstream &mipsFile, IRCodeManager &irCode, ActiveOptimize &pronActive, SymbolTable &symbolTable);
 
     void translate();
 
     void loadValue(GoalObject &goalObject, string &regName, bool ifGen, bool &isImm, int &value);
+
+    void loadValue(GoalObject &goalObject, string &regName, bool ifGen, bool &isImm, int &value, bool &regChange);
 
     void saveValue(string &obj, const string &regName);
 

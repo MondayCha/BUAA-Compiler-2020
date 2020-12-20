@@ -11,20 +11,26 @@ bool grammar_state_with_return;
 bool grammar_create_tmp_var;
 int grammar_var_offset;
 bool grammar_meet_main;
+FuncSym *grammar_current_func_ptr;
+ThreeAddCode *define_tmp_code_ptr;
 
 GrammarAnalyzer::GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError,
-                                 IRCodeManager &pronCode, std::ofstream &pronFile)
-        : lexer(pronLexer), symbolTable(pronSymbol), errorHandle(pronError), irCode(pronCode), outFile(pronFile) {
+                                 IRCodeManager &pronCode, ActiveOptimize &pronActive, std::ofstream &pronFile)
+        : lexer(pronLexer), symbolTable(pronSymbol), errorHandle(pronError), irCode(pronCode), activeOpt(pronActive),
+          outFile(pronFile) {
     grammar_func_with_return = VOID;
     grammar_state_with_return = false;
     grammar_create_tmp_var = false;
     grammar_var_offset = 0;
     grammar_meet_main = false;
+    grammar_current_func_ptr = nullptr;
+    define_tmp_code_ptr = nullptr;
 }
 
 GrammarAnalyzer &GrammarAnalyzer::getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError,
-                                              IRCodeManager &pronCode, std::ofstream &pronOutFile) {
-    static GrammarAnalyzer instance(pronLexer, pronSymbol, pronError, pronCode, pronOutFile);
+                                              IRCodeManager &pronCode, ActiveOptimize &pronActive,
+                                              std::ofstream &pronOutFile) {
+    static GrammarAnalyzer instance(pronLexer, pronSymbol, pronError, pronCode, pronActive, pronOutFile);
     return instance;
 }
 
@@ -35,6 +41,12 @@ void GrammarAnalyzer::analyzeGrammar() {
 
 /*＜程序＞::= ［＜常量说明＞］［＜变量说明＞］{＜有返回值函数定义＞|＜无返回值函数定义＞}＜主函数＞*/
 void GrammarAnalyzer::programAnalyzer() {
+    // 假设存在全局函数(内部仅包含全局常量说明和变量说明)
+    string gName = "@global";
+    auto *globalDecFunc = new FuncSym(gName, gName, VOID);
+    symbolTable.insertFuncToGlobal(globalDecFunc);
+    ADD_FUNC(globalDecFunc)
+    activeOpt.globalPtr = globalDecFunc;
     // 常量说明
     if (TOKEN_TYPE == CONSTTK) {
         constDeclarationAnalyzer();
@@ -49,6 +61,13 @@ void GrammarAnalyzer::programAnalyzer() {
     functionDeclarationAnalyzer();
     ADD_MIDCODE(OpExit, "", "", "")
     PRINT_MES(("<程序>"))
+    ///////////////////////////
+    for (FuncSym *fs : activeOpt.funcList) {
+        for (ThreeAddCode *ft : fs->funcIRCodeList) {
+            cout << ft->toString() << "\n";
+        }
+        cout << "\n";
+    }
 }
 
 /*＜常量说明＞ ::=  const＜常量定义＞;{ const＜常量定义＞;} */
@@ -146,10 +165,15 @@ void GrammarAnalyzer::intAssignAnalyzer() {
                 // ＜整数＞
                 content = integerAnalyzer();
             }
+#ifdef ERROR_HANDLE_ON
             if (!errorHandle.checkDupIdenDefine(lowerName, lexer.lineNum)) {
                 symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, INT, content));
                 ADD_MIDCODE(OpConst, INT, lowerName, content)
             }
+#else
+            symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, INT, content));
+            ADD_MIDCODE(OpConst, INT, lowerName, content)
+#endif
         }
     }
 }
@@ -175,10 +199,15 @@ void GrammarAnalyzer::charAssignAnalyzer() {
                 // PRINT_G_ERR('o')
                 content = integerAnalyzer();
             }
+#ifdef ERROR_HANDLE_ON
             if (!errorHandle.checkDupIdenDefine(lowerName, lexer.lineNum)) {
                 symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, CHAR, content));
                 ADD_MIDCODE(OpConst, CHAR, lowerName, content)
             }
+#else
+            symbolTable.insertSymbolToLocal(new ConSym(name, lowerName, CHAR, content));
+            ADD_MIDCODE(OpConst, CHAR, lowerName, content)
+#endif
         }
     }
 }
@@ -335,12 +364,17 @@ void GrammarAnalyzer::speReValFuncDefAnalyzer(string &name, string &lowerName, T
     // ＜参数表＞
     SymbolType symbolType = symbolTable.convertTypeCode(tk);
     auto *funcSym = new FuncSym(name, lowerName, symbolType);
+    ADD_FUNC(funcSym)
     ADD_MIDCODE(OpFunc, symbolType, lowerName, "")
     parameterTableAnalyzer(*funcSym, true);
     // ')'
+#ifdef ERROR_HANDLE_ON
     if (!errorHandle.checkDupFuncDefine(lowerName, LEX_LINE)) {
         symbolTable.insertFuncToGlobal(funcSym);
     }
+#else
+        symbolTable.insertFuncToGlobal(funcSym);
+#endif
     // 有参数函数定义
     CHECK_RPARENT
     // '{'
@@ -406,17 +440,14 @@ void GrammarAnalyzer::varInitAnalyzer(string &lowerName, int level, int length1,
                                       int offset, bool isInteger) {
     if (level == 0) {
         // 不会多一维的
-        irCode.addThreeAddCode(
-                new ThreeAddCode(OpASSIGN, lowerName, constInVarInitAnalyzer_return_value(isInteger), ""));
+        ADD_MIDCODE(OpASSIGN, lowerName, constInVarInitAnalyzer_return_value(isInteger), "");
     } else if (level == 1) {
         // 一维数组
         // {
         PRINT_GET
         int i = 0;
         for (; i < length1 - 1; i++) {
-            irCode.addThreeAddCode(
-                    new ThreeAddCode(OpAssArray, lowerName, offset + i,
-                                     constInVarInitAnalyzer_return_value(isInteger)));
+            ADD_MIDCODE(OpAssArray, lowerName, offset + i, constInVarInitAnalyzer_return_value(isInteger));
             if (TOKEN_TYPE != COMMA) { ; //error
                 // 遇到了提前结束的情况
                 // 如：int a[4] = {0,1}
@@ -425,9 +456,7 @@ void GrammarAnalyzer::varInitAnalyzer(string &lowerName, int level, int length1,
             }
             PRINT_GET
         }
-        irCode.addThreeAddCode(
-                new ThreeAddCode(OpAssArray, lowerName, offset + i,
-                                 constInVarInitAnalyzer_return_value(isInteger)));
+        ADD_MIDCODE(OpAssArray, lowerName, offset + i, constInVarInitAnalyzer_return_value(isInteger));
         if (TOKEN_TYPE != RBRACE) { ; //error
             readToRightBrack_and_log_error();
             return;
@@ -625,19 +654,37 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
     if (TOKEN_TYPE == WHILETK) {
         PRINT_GET
         CHECK_GET(LPARENT, "whileStatementAnalyzer()");
-        string condition_var, label1, label2;
-        label1 = genLabel();
+        string condition_var, label1, label2; /*, label3*/
+//        ThreeAddCode *p_con_begin, *p_con_end, *p_con_curr, *p_code;
+        label1 = genLabel("w_cmp_");
         ADD_MIDCODE(OpLabel, label1, "", "")
+//        p_con_begin = grammar_current_func_ptr->funcIRCodeList.back();
         conditionAnalyzer(condition_var);
+//        p_con_end = grammar_current_func_ptr->funcIRCodeList.back();
         CHECK_RPARENT
-        label2 = genLabel();
+        label2 = genLabel("w_end_");
         ADD_MIDCODE(OpBEZ, label2, condition_var, "")
+//        label3 = genLabel("w_body_");
+//        ADD_MIDCODE(OpLabel, label3, "", "")
         statementAnalyzer();
         ADD_MIDCODE(OpJmp, label1, "", "")
+        // copy for-compare
+//        for (p_con_curr = p_con_begin->p_next;
+//             p_con_curr != p_con_end->p_next && p_con_curr != nullptr; p_con_curr = p_con_curr->p_next) {
+//            p_code = p_con_curr->copy();
+//            for (auto &i : p_code->obj) {
+//                if (i.str[0] == '@') {
+//                    i.str = genLoopVar(i.str);
+//                }
+//            }
+//            grammar_current_func_ptr->addThreeAddCode(p_code);
+//        }
+//        ADD_MIDCODE(OpBNEZ, label3, condition_var + ")", "")
         ADD_MIDCODE(OpLabel, label2, "", "")
     } else if (TOKEN_TYPE == FORTK) {
         string lowerName1, lowerName2, lowerName3;
-        string exp_str, for_var, label1, label2;
+        string exp_str, for_var, label1, label2; /*, label3*/
+//        ThreeAddCode *p_con_begin, *p_con_end, *p_con_curr, *p_code;
         SymbolType exp_type;
         int exp_int;
         //for
@@ -645,10 +692,12 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         //'('
         CHECK_GET(LPARENT, "forStatementAnalyzer (");
         lowerName1 = LEX_LONA; //＜标识符＞
+#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
         errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
+#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer ");
         CHECK_GET(ASSIGN, "forStatementAnalyzer ="); //＝
         //for'('＜标识符＞＝＜表达式＞
@@ -658,26 +707,32 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         } else {
             ADD_MIDCODE(OpASSIGN, lowerName1, exp_str, "")
         }
-        label1 = genLabel();
+        label1 = genLabel("f_cmp_");
         ADD_MIDCODE(OpLabel, label1, "", "")
         CHECK_SEMICN //;
+//        p_con_begin = grammar_current_func_ptr->funcIRCodeList.back();
         conditionAnalyzer(for_var);
-        label2 = genLabel();
+//        p_con_end = grammar_current_func_ptr->funcIRCodeList.back();
+        label2 = genLabel("f_end_");
         ADD_MIDCODE(OpBEZ, label2, for_var, "")
         CHECK_SEMICN //;
         //＜标识符＞
         lowerName2 = LEX_LONA;
+#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
         // 不能改变常量的值
         errorHandle.checkChangeConstIden(LEX_LONA, LEX_LINE);
+#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         //＝
         CHECK_GET(ASSIGN, "forStatementAnalyzer()");
         //＜标识符＞
         lowerName3 = LEX_LONA;
+#ifdef ERROR_HANDLE_ON
         // 未定义的名字
         errorHandle.checkUndefIdenRefer(LEX_LONA, LEX_LINE);
+#endif
         CHECK_GET(IDENFR, "forStatementAnalyzer()");
         int stepSize;
         bool isPlus = true;
@@ -692,9 +747,22 @@ void GrammarAnalyzer::loopStatementAnalyzer() {
         stepSize = unsignedIntAnalyzer();
         PRINT_MES(("<步长>"))
         CHECK_RPARENT
+//        label3 = genLabel("f_body_");
+//        ADD_MIDCODE(OpLabel, label3, "", "")
         // ＜语句＞
         statementAnalyzer();
         ADD_MIDCODE(isPlus ? OpPLUS : OpMINU, lowerName2, lowerName3, stepSize)
+//        for (p_con_curr = p_con_begin->p_next;
+//             p_con_curr != p_con_end->p_next && p_con_curr != nullptr; p_con_curr = p_con_curr->p_next) {
+//            p_code = p_con_curr->copy();
+//            for (auto &i : p_code->obj) {
+//                if (i.str[0] == '@') {
+//                    i.str = genLoopVar(i.str);
+//                }
+//            }
+//            grammar_current_func_ptr->addThreeAddCode(p_code);
+//        }
+//        ADD_MIDCODE(OpBNEZ, label3, for_var + ")", "")
         ADD_MIDCODE(OpJmp, label1, "", "")
         ADD_MIDCODE(OpLabel, label2, "", "")
     }
@@ -1012,12 +1080,12 @@ void GrammarAnalyzer::conditionalStatementAnalyzer() {
     conditionAnalyzer(condition_var);
     CHECK_RPARENT
     string label_if_else, label_if_end;
-    label_if_else = genLabel();
+    label_if_else = genLabel("if");
     ADD_MIDCODE(OpBEZ, label_if_else, condition_var, "")
     statementAnalyzer();
     if (TOKEN_TYPE == ELSETK) {
         PRINT_GET
-        label_if_end = genLabel();
+        label_if_end = genLabel("if");
         ADD_MIDCODE(OpJmp, label_if_end, "", "")
         ADD_MIDCODE(OpLabel, label_if_else, "", "")
         statementAnalyzer();
@@ -1043,7 +1111,9 @@ string GrammarAnalyzer::arrayExpAssignAnalyzer(string &lower_name, bool genTmp, 
     int level = 1;
     SymbolType t1, t2;
     t1 = expressionAnalyzer(str_len1, exp_int1);
+#ifdef ERROR_HANDLE_ON
     errorHandle.checkArrayIndexNotInt(t1, LEX_LINE);
+#endif
     CHECK_RBRACK
     if (TOKEN_TYPE == LBRACK) {
         PRINT_GET
@@ -1119,9 +1189,11 @@ string GrammarAnalyzer::arrayExpAssignAnalyzer(string &lower_name, bool genTmp, 
 void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) {
     //标识符已读
     // 未定义的名字
+#ifdef ERROR_HANDLE_ON
     errorHandle.checkUndefIdenRefer(lower_name, LEX_LINE);
     // 不能改变常量的值
     errorHandle.checkChangeConstIden(lower_name, LEX_LINE);
+#endif
     bool isArray = false;
     string array_index_s;
     int array_index;
@@ -1155,7 +1227,8 @@ void GrammarAnalyzer::assignStatementAnalyzer(string &name, string &lower_name) 
 #ifdef CODE_OPTIMIZE_ON
             // 消去最后一个临时变量
             if (grammar_create_tmp_var) {
-                irCode.updateLastCode(lower_name);
+//                irCode.updateLastCode(lower_name);
+                grammar_current_func_ptr->updateLastCode(lower_name);
             } else {
                 ADD_MIDCODE(OpASSIGN, lower_name, exp_string, "")
             }
@@ -1194,7 +1267,7 @@ void GrammarAnalyzer::returnStatementAnalyzer() {
         if (grammar_func_with_return != VOID && grammar_func_with_return != expType) {
             errorHandle.printErrorOfReturnMatch(LEX_LINE);
         }
-        if (exp_type == INT && exp_type == CHAR) {
+        if (exp_type == INT || exp_type == CHAR) {
             ADD_MIDCODE(OpReturn, exp_int, expType, "")
         } else {
             ADD_MIDCODE(OpReturn, exp_str, expType, "")
@@ -1242,13 +1315,25 @@ void GrammarAnalyzer::writeStatementAnalyzer() {
         if (TOKEN_TYPE == COMMA) {
             PRINT_GET
             string tmpValue;
-            SymbolType tmpSymType = expressionAnalyzer(tmpValue);
-            ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
+            int exp_int;
+            SymbolType tmpSymType = expressionAnalyzer(tmpValue, exp_int);
+            if (tmpSymType == INT || tmpSymType == CHAR) {
+                ADD_MIDCODE(OpPrint, tmpSymType, exp_int, "")
+            } else {
+                tmpSymType = (tmpSymType == INTVAR) ? INT : CHAR;
+                ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
+            }
         }
     } else {
         string tmpValue;
-        SymbolType tmpSymType = expressionAnalyzer(tmpValue);
-        ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
+        int exp_int;
+        SymbolType tmpSymType = expressionAnalyzer(tmpValue, exp_int);
+        if (tmpSymType == INT || tmpSymType == CHAR) {
+            ADD_MIDCODE(OpPrint, tmpSymType, exp_int, "")
+        } else {
+            tmpSymType = (tmpSymType == INTVAR) ? INT : CHAR;
+            ADD_MIDCODE(OpPrint, tmpSymType, tmpValue, "")
+        }
     }
     //CHECK_//GET(RPARENT, ")");
     CHECK_RPARENT
@@ -1267,6 +1352,8 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
             if (TOKEN_TYPE == MAINTK) {
                 auto *funcSym = new FuncSym(LEX_NAME, LEX_LONA, MAIN);
                 symbolTable.insertFuncToGlobal(funcSym);
+                ADD_FUNC(funcSym)
+                activeOpt.mainPtr = funcSym;
                 ADD_MIDCODE(OpFunc, VOID, LEX_LONA, "")
                 // ＜主函数＞
                 PRINT_GET
@@ -1287,6 +1374,7 @@ void GrammarAnalyzer::functionDeclarationAnalyzer() {
             } else {
                 // ＜无返回值函数定义＞  ::= void＜标识符＞
                 auto *funcSym = new FuncSym(lexer.strToken, LEX_LONA, VOID);
+                ADD_FUNC(funcSym)
                 ADD_MIDCODE(OpFunc, VOID, lexer.lexToken.content_p, "")
                 PRINT_GET
                 // '('＜参数表＞')''{'＜复合语句＞'}'
@@ -1429,6 +1517,14 @@ void GrammarAnalyzer::switchStatementAnalyzer() {
     } else if (switchType == CHARVAR) {
         switchType = CHAR;
     }
+    if (switch_type != INT && switch_type != CHAR) {
+        if (exp_str[0] == '@') {
+            string sa;
+            sa = genSwitchTmpVar(switchType);
+            ADD_MIDCODE(OpASSIGN, sa, exp_str, "")
+            exp_str = sa;
+        }
+    }
     //CHECK_//GET(RPARENT, "func call )");
     CHECK_RPARENT
     CHECK_GET(LBRACE, "{ main");
@@ -1459,7 +1555,7 @@ void GrammarAnalyzer::situationSwitchAnalyzer(SymbolType switchType, SymbolType 
         } else {
             ADD_MIDCODE(OpEQL, case_str, exp1_str, switchConstant);
         }
-        string next_case = genLabel();
+        string next_case = genLabel("case");
         ADD_MIDCODE(OpBEZ, next_case, case_str, "")
         statementAnalyzer();
         ADD_MIDCODE(OpJmp, end_label, "", "")
@@ -1530,8 +1626,33 @@ string GrammarAnalyzer::genTmpVar_and_insert(SymbolType symType) {
     return ans;
 }
 
-string GrammarAnalyzer::genLabel() {
+string GrammarAnalyzer::genSwitchTmpVar(SymbolType symType) {
+    static int index = -1;
+    string ans = "(" + to_string(++index);
+    Symbol *p_sym = new VarSym(ans, ans, symType, 0, 0, 0, grammar_var_offset);
+    symbolTable.insertSymbolToLocal(p_sym);
+    grammar_var_offset++;
+    grammar_create_tmp_var = true;
+    // cout << "/////////////////// gen tmp named " << ans << " and offset is " << to_string(grammar_var_offset) << endl;
+    return ans;
+}
+
+string GrammarAnalyzer::genLoopVar(string &beforeName) {
+    bool isGlobal = false;
+    string ans = beforeName + ")";
+    Symbol *tp = symbolTable.getSymbolPtr(&(symbolTable.localIdenTable), beforeName, isGlobal);
+    Symbol *p_sym = new VarSym(ans, ans, tp->symbolType, 0, 0, 0, grammar_var_offset);
+    Symbol *tsp = symbolTable.getSymbolPtr(&(symbolTable.localIdenTable), ans, isGlobal);
+    if (tsp == nullptr) {
+        symbolTable.insertSymbolToLocal(p_sym);
+    }
+    grammar_var_offset++;
+    grammar_create_tmp_var = true;
+    return ans;
+}
+
+string GrammarAnalyzer::genLabel(const string &labelName) {
     static int label_index = -1;
-    string ans = "label_" + to_string(++label_index);
+    string ans = "l_" + labelName + to_string(++label_index);
     return ans;
 }

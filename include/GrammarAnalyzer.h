@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by Dlee on 2020/10/5.
 //
 
@@ -10,13 +10,20 @@
 #include "SymbolTable.h"
 #include "ErrorHandle.h"
 #include "IRCodeManager.h"
+#include "ActiveOptimize.h"
 
-
+///////////////////////////////////////////////////////
+/////////////////////// 优化开关 //////////////////////
 //#define CLOSE_GRAMMER_OUTPUT
 #define CODE_OPTIMIZE_ON
+#define ERROR_HANDLE_ON
+///////////////////////////////////////////////////////
+/////////////////////// 优化开关 //////////////////////
 
 #define GET_TOKEN lexer.getNextToken()
 
+///////////////////////////////////////////////////////
+//////////////// 关闭语法分析输出 /////////////////////
 #ifdef CLOSE_GRAMMER_OUTPUT
 #define PRINT_GET lexer.getNextToken();
 #define PRINT_MES(Message)
@@ -24,6 +31,7 @@
 #define PRINT_GET outFile << lexer.analyzerResult << endl;lexer.getNextToken();
 #define PRINT_MES(Message) outFile << Message << endl;
 #endif
+
 #define TYPE_IDEN (TOKEN_TYPE == INTTK || TOKEN_TYPE == CHARTK)
 #define TYPE_ADDE (TOKEN_TYPE == PLUS || TOKEN_TYPE == MINU)
 #define CHECK_GET(A, B) {\
@@ -44,6 +52,7 @@ errorHandle.printErrorLine('m', lexer.lastLineNum);\
 }else{\
 PRINT_GET\
 }
+
 #define CHECK_SEMICN \
 if (TOKEN_TYPE == SEMICN) {\
 PRINT_GET\
@@ -53,7 +62,7 @@ PRINT_G_SEM\
 
 #define STORE_EXP(opType, obj1, obj2) \
 ans = genTmpVar_and_insert(INTTMP);           \
-irCode.addThreeAddCode(new ThreeAddCode(opType, ans, obj1, obj2));\
+ADD_MIDCODE(opType, ans, obj1, obj2);\
 op1 = move(ans);
 
 #define LEX_LINE lexer.lineNum
@@ -63,24 +72,31 @@ op1 = move(ans);
 #define TOKEN_TYPE lexer.typeCode
 #define PRINT_G_ERR(A) errorHandle.printErrorLine(A, lexer.lineNum);
 #define PRINT_G_SEM errorHandle.printErrorLine('k', lexer.lastLineNum);
-#define ADD_MIDCODE(op,s1,s2,s3) irCode.addThreeAddCode(new ThreeAddCode(op, s1, s2, s3));
+#define ADD_MIDCODE(op,s1,s2,s3)\
+define_tmp_code_ptr = new ThreeAddCode(op,s1,s2,s3);\
+grammar_current_func_ptr->addThreeAddCode(define_tmp_code_ptr);
+
+#define ADD_FUNC(func_name) \
+grammar_current_func_ptr = func_name;\
+activeOpt.funcList.push_back(func_name);
 
 class GrammarAnalyzer {
 private:
     explicit GrammarAnalyzer(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError, IRCodeManager &pronCode,
-                             std::ofstream &pronFile);
+                             ActiveOptimize &pronActive, std::ofstream &pronFile);
 
     Lexer &lexer;
     SymbolTable &symbolTable;
     ErrorHandle &errorHandle;
     IRCodeManager &irCode;
+    ActiveOptimize &activeOpt;
     ofstream &outFile;
     ///////// analyze grammar //////////
 
 public:
     static GrammarAnalyzer &
     getInstance(Lexer &pronLexer, SymbolTable &pronSymbol, ErrorHandle &pronError, IRCodeManager &pronCode,
-                std::ofstream &pronOutFile);
+                ActiveOptimize &pronActive,std::ofstream &pronOutFile);
 
     void analyzeGrammar();
 
@@ -181,7 +197,11 @@ public:
 
     string arrayExpAssignAnalyzer(string &lower_name);
 
-    string genLabel();
+    string genLabel(const string &labelName);
+
+    string genSwitchTmpVar(SymbolType symType);
+
+    string genLoopVar(string &beforeName);
 };
 
 #endif //SCANNER_GRAMMARANALYZER_H

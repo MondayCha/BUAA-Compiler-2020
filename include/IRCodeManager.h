@@ -46,6 +46,14 @@ struct GoalObject {
     string str; // lower
     SymbolType type;
     int num;
+
+    GoalObject operator=(GoalObject &goalObjectTmp) {
+        branch = goalObjectTmp.branch;
+        str = goalObjectTmp.str;
+        type = goalObjectTmp.type;
+        num = goalObjectTmp.num;
+        return *this;
+    }
 };
 
 class ThreeAddCode {
@@ -58,6 +66,12 @@ private:
 
     friend class MipsTranslator;
 
+    friend class FuncSym;
+
+    friend class ActiveOptimize;
+
+    friend class GrammarAnalyzer;
+
     void setObj(int index, string pronStr);
 
     void setObj(int index, SymbolType pronSym);
@@ -66,7 +80,11 @@ private:
 
     void setNext(ThreeAddCode *pron_next);
 
+    ThreeAddCode * copy();
+
 public:
+    ThreeAddCode(OperatorType op);
+
     ThreeAddCode(OperatorType op, string rd, string rs, string rt);
 
     ThreeAddCode(OperatorType op, SymbolType rd, string rs, string rt);
@@ -92,6 +110,8 @@ public:
     string branchToString(int index);
 
     ThreeAddCode *getNext();
+
+    string toMidString();
 };
 
 #endif //MYCOMPILER_IRCODEMANAGER_H

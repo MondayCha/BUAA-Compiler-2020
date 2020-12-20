@@ -7,23 +7,29 @@
 
 #include "IRCodeManager.h"
 #include "SymbolTable.h"
+#include <queue>
 
 class ActiveOptimize {
 private:
-    explicit ActiveOptimize();
+    explicit ActiveOptimize(SymbolTable &pronSymbol,IRCodeManager &pronCode);
+
+    SymbolTable &symbolTable;
+    IRCodeManager &irCode;
+
+
+    void splitBasicBlock();
+
+    bool usedFuncMapHas(string &lowerName);
 
 public:
-    map<FuncSym *, vector<ThreeAddCode *>> funcIRCodeVector;
+    FuncSym *mainPtr;
+    FuncSym *globalPtr;
+    map<string, FuncSym *> usedFuncMap;
+    list<FuncSym *> funcList;
 
-    static ActiveOptimize &getInstance();
+    static ActiveOptimize &getInstance(SymbolTable &pronSymbol,IRCodeManager &pronCode);
 
-
+    void optimizeCode();
 };
-
-class Block {
-public:
-
-};
-
 
 #endif //MYCOMPILER_ACTIVEOPTIMIZE_H

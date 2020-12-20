@@ -185,6 +185,36 @@ void FuncSym::setFuncLocalTable(map<string, Symbol *> pronTable) {
     funcLocalTable = move(pronTable);
 }
 
+void FuncSym::addThreeAddCode(ThreeAddCode *code) {
+    if (!funcIRCodeList.empty()) {
+        funcIRCodeList.back()->setNext(code);
+    }
+    funcIRCodeList.push_back(code);
+
+}
+
+void FuncSym::updateLastCode(string &ans) {
+    ThreeAddCode *p_code = funcIRCodeList.back();
+    p_code->setObj(0, ans);
+}
+
+void FuncSym::addCountOfVar(string &name) {
+    if(name[0] != '@'){
+        auto iter = varUseCountMap.find(name);
+        if (iter != varUseCountMap.end()) {
+            int count = (iter->second) + 1;
+            varUseCountMap.erase(name);
+            varUseCountMap.insert({name, count});
+        } else {
+            varUseCountMap.insert({name, 1});
+        }
+    }
+}
+
+ThreeAddCode *FuncSym::getLastCodePtr() {
+    return funcIRCodeList.back();
+}
+
 ConSym::ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent)
         : Symbol(
         pronName,

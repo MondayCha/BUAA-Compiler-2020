@@ -1,196 +1,142 @@
-# 2020错误处理阶段设计文档
+# 2020代码生成阶段设计文档
 
 ## 1. 需求分析
 
 ### 1.1 问题描述
 
-请根据给定的文法设计并实现错误处理程序，能诊察出常见的语法和语义错误，进行错误局部化处理，并输出错误信息。
+在词法分析、语法分析及错误处理作业的基础上，为编译器实现语义分析、代码生成功能。输入输出及处理要求如下：
 
-- **诊察出常见的语法和语义错误**：按照题目所给的错误类型设计对应的处理程序
-- **错误局部化处理**：如何最小化错误的影响？如何提升性能？
+- 需根据文法规则及语义约定，采用自顶向下的语法制导翻译技术，进行语义分析并生成目标代码（任选其一）；
+
+- 对于选择生成**MIPS**的编译器，约定如下：
+
+  完成编译器，将源文件（统一命名为testfile.txt）编译生成MIPS汇编并输出到文件（统一命名为mips.txt），具体要求包括：
+
+  1. 需自行设计四元式中间代码，再从中间代码生成MIPS汇编，请设计实现输出中间代码的有关函数，本次作业不考核，后续会有优化前后中间代码的输出及评判
+  2. 若选择此项任务，后续的作业需参加竞速排序，请提前预留代码优化有关的接口，并设计方便切换开启/关闭优化的模式
+  3. 自行调试时，可使用Mars仿真器，提交到平台的编译器只需要能按统一的要求生成MIPS汇编代码文件即可。
 
 
 
 ## 2. 初步思路
 
-- **关于文法**：在语法分析中，我对文法进行了修改，使得不同产生式之间没有交集。因此错误处理只需要在对应的递归调用子程序中增加判断条件就可以了。
-- **表达式类型**：表达式有char和int两种类型，因此我将表达式、项、因子的返回值都设置为对应的类型，一旦某个char类型参与了运算就转换为int，为空时则返回void，与符号表管理所用的枚举类一致。
-- **符号表管理**：注意到在本次作业中，常量、变量定义只能在主函数之前或函数块开头，因此对于错误处理来说最多只有一张全局符号表和一张局部符号表，因此我们可以简化符号表类的设计。
+- 代码生成阶段主要分为两部分，中间代码生成以及从中间代码转到MIPS代码。参考网上的资料后，我的四元式设计包括操作符以及三个封装后的操作数结构体；在转换为MIPS代码时，则使用`$t0 $t1 $t2$`三个寄存器。
+- 对于变量定义和常量定义，可以直接放在符号表中，不需要生成四元式。
+- 函数调用和函数定义时，参数的中间代码参考课程组提供的中间代码规范，函数定义时先进行声明，之后一个个传入形参参数；函数调用时先压入参数，之后再生成调用函数的中间代码。
 
 
 
 ## 3. 模块设计
 
-### 3.1 错误处理类设计
+### 3.1 中间代码设计
 
 ```c++
-class ErrorHandle {
+class ThreeAddCode {
 private:
-    explicit ErrorHandle(SymbolTable &symbolTable, ofstream &errorFile);   // Singleton Pattern
-    SymbolTable &symbolTable;
-    ofstream &errorFile;
-public:
-    static ErrorHandle &getInstance(SymbolTable &symbolTable, ofstream &errorFile);
+    OperatorType op;
+    GoalObject obj[3];
+    ThreeAddCode *p_next = nullptr;
+};
 
-    void printErrorLine(char errorCode, int &lineNum);
-
-    ...
-
-    void checkChangeConstIden(string &lowerName, int &lineNum);
+struct GoalObject {
+    int branch;
+    string str; // lower
+    SymbolType type;
+    int num;
 };
 ```
 
-使用静态成员实现单例模式，对外提供 `getInstance()`方法来访问这个对象。坦言之，目前我的错误处理类设计并不理想——我的错误处理类究竟要承担什么功能？比如对于非法符号类型的错误，对于字符类型我会将符号传入对应的错误处理方法，用`checkIllegalCharReturnNull`判断是否存在非法字符；但字符串类型我就直接在`Lexer`中处理了，因为本身也要逐个扫描，仅仅调用`printErrorLine`打印错误信息。所以结果上这里互相调用非常散乱，可以认为就是面向过程了……在之后的错误处理上，我想我会重新规划这一设计。
+操作数为一个结构体，第一个属性`branch`标记了该结构体所指向的内容，`branch`为0时意为该操作数为字符串形式（变量名、标签名等）；`branch`为1时说明是类型（`CHAR, INT, VOID`）；`branch`为2时表示立即数。同时在生成这三种类型的操作数时，都将`str`属性的值进行了初始化，方便输出中间代码。附上各运算符以及其含义：
 
-错误处理类提供的方法如下：
-| 名称                                                         | 描述                                                   |
-| ------------------------------------------------------------ | ------------------------------------------------------ |
-| `void printErrorLine(char errorCode, int &lineNum);`         | 打印错误码和行数                                       |
-| `void printErrorLine(char errorCode, int &lineNum, bool &findError);` | 重载，如果在本行已经打印过一次，就不再打印错误码和行数 |
-| `void printErrorOfReturnMatch(int &lineNum);`                | 打印返回值错误                                         |
-| `bool checkIllegalCharReturnNull(char &content, int &lineNum, bool &findError);` | 检查字符含有非法符号                                   |
-| `bool checkDupIdenDefine(string &lowerName, int &lineNum);`  | 检查重复定义的标识符                                   |
-| `bool checkDupFuncDefine(string &lowerName, int &lineNum);`  | 检查重复定义的函数                                     |
-| `bool checkUndefFuncCall(string &lowerName, int &lineNum);`  | 检查未定义函数调用                                     |
-| `bool checkArrayIndexNotInt(SymbolType expType, int &lineNum);` | 检查数组下标不为Int类型                                |
-| `bool checkUndefIdenRefer(string &lowerName, int &lineNum);` | 检查未定义标识符引用                                   |
-| `void printErrorOfNoReturnMatch(int &lineNum);`              | 打印无返回值的函数存在不匹配的return语句错误           |
-| `void printErrorOfUnMatchConst(int &lineNum);`               | 打印<常量>类型不一致错误                               |
-| `void checkChangeConstIden(string &lowerName, int &lineNum);` | 检查改变常量的值错误                                   |
+| 运算符 | 含义 |
+| ---- | ---- |
+|`OpPLUS`| `+` |
+|`OpMINU`| `-` |
+|`OpMULT`| `*` |
+|`OpDIV`| `/` |
+|`OpASSIGN`| 赋值语句 |
+|`OpScanf`| 读语句 |
+|`OpPrint`| 写语句 |
+|`OpConst`| 常量定义（以及初始化） |
+|`OpVar`| 变量定义 |
+|`OpFunc`| 函数声明 |
+|`OpJMain`| 跳转到主函数（用在全局变量及初始化后） |
+|`OpExit`| 调用系统调用的结束 |
+|`OpAssArray`| 数组赋值 |
+|`OpGetArray`| 数组取值 |
+|`OpLSS`| `<` |
+|`OpLEQ`| `<=` |
+|`OpGRE`| `>` |
+|`OpGEQ`| `>=` |
+|`OpEQL`| `==` |
+|`OpNEQ`| `!=` |
+|`OpBEZ`| 操作数1为0时跳转 |
+|`OpBNEZ`| 操作数1不为0时跳转 |
+|`OpJmp`| 无条件跳转语句 |
+|`OpLabel`| 生成标签 |
+|`OpParam`| 函数形参 |
+|`OpPaVal`| 函数实参 |
+|`OpCall`| 函数调用 |
+|`OpReturn`| 函数返回 |
+|`OpRetVar `| 将返回值存储到操作数1 |
 
-选择在词法分析程序中直接调用`printErrorLine`还是对应的`ErrorHandle`检查的主要依据是：是否在多处需要分析此类型错误。
-
-
-
-### 3.2 符号表类设计
-
-```c++
-class SymbolTable {
-private:
-    explicit SymbolTable();
-
-    friend class GrammarAnalyzer;
-
-    map<string, FuncSym> globalFuncTable;
-    map<string, Symbol> globalIdenTable;
-    map<string, Symbol> localIdenTable;
-public:
-    static SymbolTable &getInstance();
-
-    ...
-
-    vector<VarSym> getFuncParams(string &lower_name);
-};
-```
-
-符号表类同样采用单例模式，内部储存了三个哈希表：
-
-| 名称              | 描述                                                         |
-| ----------------- | ------------------------------------------------------------ |
-| `globalFuncTable` | 函数表，单独储存，添加时需要判断是否与表内元素或`globalIdenTable`重名 |
-| `globalIdenTable` | 全局常量、变量表，在读取完声明声明后用`move`从`localIdenTable`中得到 |
-| `localIdenTable`  | 当前的常量、变量、参数表                                     |
-
-对于符号，则是在父类`Symbol`中增加基本的类型（int, void ,char）、属性（func, var, const），在子类中添加各自特有的属性。为了方便比较同名符号，保存小写转换后的名字属性。
+示例函数：
 
 ```c++
-// 父类（没设成抽象类……）
-class Symbol {
-private:
-    string name;
-    string lowerName;
-    SymbolAtt symbolAtt;
-    SymbolType symbolType;
-public:
-    Symbol(string &pronName, string &pronLowerName, SymbolAtt pronAtt, SymbolType pronType);
-};
+int seed[3] = {19971231, 19981013, 1000000007};
+int i = 0;
 
-// 变量类符号
-class VarSym : public Symbol {
-private:
-    int level;		// 存储维数
-    int length1;	// 维数1
-    int length2;	// 维数2
-public:
-    VarSym(string &pronName, string &pronLowerName, SymbolType pronType, int plevel, int plength1, int plength2);
-};
-
-// 函数类符号
-class FuncSym : public Symbol {
-private:
-    vector<VarSym> parameters;	// 函数形参
-public:
-    FuncSym(string &pronName, string &pronLowerName, SymbolType pronType);
-};
-
-// 常量类符号
-class ConSym : public Symbol {
-private:
-    int content;				// 常量初始值
-public:
-    ConSym(string &pronName, string &pronLowerName, SymbolType pronType, int pronContent);
-};
+void main(){
+    int tmp = 0;
+    while(i<1000){
+        tmp = tmp + 100000 * 100000;
+        tmp = tmp - tmp / 100000 * 100000;
+        i = i + 1;
+    }
+    printf(tmp);
+    return ;
+}
 ```
 
-符号表类对外提供的方法如下：
+中间代码示例：
 
-| 名称              | 描述                                                         |
-| ----------------- | ------------------------------------------------------------ |
-| `bool hasIdenName(string &name);`  | 当前符号表中是否存在该名称符号（用于检查重名定义） |
-| `bool hasIdenNameIncludeGlobal(string &name);`  | 当前符号表以及全局符号表中是否存在该名称符号（用于检查未定义调用） |
-| `bool hasFuncName(string &name);`  | 是否存在该名称函数 |
-| `void insertSymbolToLocal(const Symbol &symbol);`  | 将符号插入到当前的局部符号表 |
-| `void insertFuncToGlobal(const FuncSym &funcSym);`  | 插入函数到全局函数表 |
-| `void endGlobalIdenSymbol();`  | 将局部符号表`move`为全局符号表 |
-| `void endLocalIdenSymbol();`  | 清空局部符号表 |
-| `SymbolType convertTypeCode(TypeCode typeCode);`  | 将`TypeCode`转换为对应的`SymbolType` |
-| `SymbolType getFuncType(string &lower_name);`  | 获取函数类型 |
-| `SymbolType getIdenType(string &lower_name);`  | 获取符号类型 |
-| `SymbolAtt getIdenAtt(string &lower_name);`  | 获取符号属性 |
-| `vector<VarSym> getFuncParams(string &lower_name);`  | 返回函数的参数表向量 |
+```
+VarDef     [symType : Int]       [string  : seed]      [int/char: 3]
+AssArr    [string  : seed]      [int/char: 0]     [int/char: 19971231]
+AssArr    [string  : seed]      [int/char: 1]     [int/char: 19981013]
+AssArr    [string  : seed]      [int/char: 2]     [int/char: 1000000007]
+VarDef    [symType : Int]       [string  : i]     [int/char: 1]
+ASSIGN    [string  : i]     [int/char: 0]
+JMain 
+FunDef    [symType : Void]      [string  : main]
+VarDef    [symType : Int]       [string  : tmp]       [int/char: 1]
+ASSIGN    [string  : tmp]       [int/char: 0]
+Label:    [string  : label_0]
+cd LSS    [string  : tmp_0]     [string  : i]     [int/char: 1000]
+bez       [string  : label_1]       [string  : tmp_0]
+MULT      [string  : tmp_1]     [int/char: 100000]    [int/char: 100000]
+PLUS      [string  : tmp_2]     [string  : tmp]       [string  : tmp_1]
+ASSIGN    [string  : tmp]       [string  : tmp_2]
+DIV       [string  : tmp_3]     [string  : tmp]       [int/char: 100000]
+MULT      [string  : tmp_4]     [string  : tmp_3]     [int/char: 100000]
+MINU      [string  : tmp_5]     [string  : tmp]       [string  : tmp_4]
+ASSIGN    [string  : tmp]       [string  : tmp_5]
+PLUS      [string  : tmp_6]     [string  : i]     [int/char: 1]
+ASSIGN    [string  : i]     [string  : tmp_6]
+Jmp to    [string  : label_0]
+Label:    [string  : label_1]
+Print     [symType : Int]       [string  : tmp]
+Print     [symType : Void]      [string  : nLine]
+Exit  
+Exit  每个操作数同样输出了类型，方便debug。
+```
 
-
-
-## 4. 设计修改情况
-
-在编码后，我进行了如下调整：
-
-1. 增加一键开关输出的宏，在上一次的语法分析作业中，我将打印词法、语法分析结果用PRINT_GET、PRINT_MES等宏封装起来，而此次作业则增加`ifdef`语句，方便开关输出：
-
-   ```c++
-   #ifdef CLOSE_GRAMMER_OUTPUT
-   #define PRINT_GET lexer.getNextToken();
-   #define PRINT_MES(Message)
-   #else
-   #define PRINT_GET outFile << lexer.analyzerResult << endl;lexer.getNextToken();
-   #define PRINT_MES(Message) outFile << Message << endl;
-   #endif
-   ```
-
-2. 对于数组类型个数不匹配，我选择了一旦发现问题，立刻读取到“}”末尾的跳读方式，进行相应的错误局部化处理；然而在处理函数的参数表时则不能这样做：因为函数参数表结束的标志：“)”可能缺少，就会导致跳读无法正常结束，这也导致了我课下测试Testfile 5 TLE的原因。
-
-   而为了修改，我最后选择了先保存函数的实参表，然后从函数符号类`FuncSym`中获取向量`vector<VarSym> parameters`，先比较二者长度，再逐个检查类型是否一致。
-
-   ```c++
-   if (vectorVar.size() != referParamsList.size()) {
-           // 函数参数个数不匹配
-           // 函数调用时实参个数大于或小于形参个数
-           PRINT_G_ERR('d');
-       } else {
-           for (int i = 0; i < referParamsList.size(); i++) {
-               if (vectorVar.at(i).symbolType != referParamsList.at(i)) {
-                   // 函数参数类型不匹配
-                   PRINT_G_ERR('e');
-                   break;
-               }
-           }
-       }
-   ```
-
-其他部分基本与当初的设计思路一致。
+而对于函数的参数空间分配，将局部变量存入`sp`指针下的栈；将全局变量存入`gp`指针下的栈。偏移量在符号表中就已经存储了。
 
 
 
-## 5. 个人总结
+## 4. 修改情况
 
-上次写语法分析设计文档时夸下的海口果然一个都没实现，这次错误处理开头又把语法分析的遗留问题重新整理了一遍。另外这次错误处理的课下测试点感觉也不强，比如我之前对于形如`while(1)`的语句部分为空语句，但缺少分号的情况就无法正确处理，结果也通过了全部测试点……不知道是为了避免歧义不做考察还是挖坑，但这意味着我的错误处理代码还是有可能存在其他问题的。
+我目前采用的四元式包括运算符、三个操作数以及一个指向下一条四元式的指针。事实上在写代码优化时我对这个架构非常后悔，目前在从四元式转换到MIPS代码时，对于每个变量和函数都需要依靠`str`的值去查表，如果可以在操作数中增加一个指向符号对象的指针，那么开销就会小很多……然而现在要改已经来不及了。
+
+再加上最近其他课程的DDL也纷至沓来，其实我现在想想，代码优化才是编译最有挑战性的地方，但我前期却花了大量时间在递归下降子程序分析的重复劳动中，但是下周又要进行理论课考试……之后尽量做些代码优化吧。
