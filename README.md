@@ -1,142 +1,98 @@
-# 2020代码生成阶段设计文档
+# 2020代码优化阶段说明文档
 
-## 1. 需求分析
+### 1. 常数传播
 
-### 1.1 问题描述
-
-在词法分析、语法分析及错误处理作业的基础上，为编译器实现语义分析、代码生成功能。输入输出及处理要求如下：
-
-- 需根据文法规则及语义约定，采用自顶向下的语法制导翻译技术，进行语义分析并生成目标代码（任选其一）；
-
-- 对于选择生成**MIPS**的编译器，约定如下：
-
-  完成编译器，将源文件（统一命名为testfile.txt）编译生成MIPS汇编并输出到文件（统一命名为mips.txt），具体要求包括：
-
-  1. 需自行设计四元式中间代码，再从中间代码生成MIPS汇编，请设计实现输出中间代码的有关函数，本次作业不考核，后续会有优化前后中间代码的输出及评判
-  2. 若选择此项任务，后续的作业需参加竞速排序，请提前预留代码优化有关的接口，并设计方便切换开启/关闭优化的模式
-  3. 自行调试时，可使用Mars仿真器，提交到平台的编译器只需要能按统一的要求生成MIPS汇编代码文件即可。
+- 对于形如`x=1+2`的表达式，直接计算出结果
+- 对于形如`x=y+2`的表达式，采用`addi`指令
+- 常量不为其分配MIPS存储空间，在计算时从符号表找到对应的值加入运算
+- 对于包含0的四元式，采用`$0`代替0进行计算
+- 条件跳转语句为两个常数进行比较时，改为无条件跳转
 
 
 
-## 2. 初步思路
+### 2. 表达式计算
 
-- 代码生成阶段主要分为两部分，中间代码生成以及从中间代码转到MIPS代码。参考网上的资料后，我的四元式设计包括操作符以及三个封装后的操作数结构体；在转换为MIPS代码时，则使用`$t0 $t1 $t2$`三个寄存器。
-- 对于变量定义和常量定义，可以直接放在符号表中，不需要生成四元式。
-- 函数调用和函数定义时，参数的中间代码参考课程组提供的中间代码规范，函数定义时先进行声明，之后一个个传入形参参数；函数调用时先压入参数，之后再生成调用函数的中间代码。
-
-
-
-## 3. 模块设计
-
-### 3.1 中间代码设计
+将乘数、被除数为2的整数次幂的情况转换为左移和逻辑右移。其中除法需要进行分支跳转，代价从10降低到了5。判断被除数是否为2的整数幂则采用移位运算。
 
 ```c++
-class ThreeAddCode {
-private:
-    OperatorType op;
-    GoalObject obj[3];
-    ThreeAddCode *p_next = nullptr;
-};
-
-struct GoalObject {
-    int branch;
-    string str; // lower
-    SymbolType type;
-    int num;
-};
-```
-
-操作数为一个结构体，第一个属性`branch`标记了该结构体所指向的内容，`branch`为0时意为该操作数为字符串形式（变量名、标签名等）；`branch`为1时说明是类型（`CHAR, INT, VOID`）；`branch`为2时表示立即数。同时在生成这三种类型的操作数时，都将`str`属性的值进行了初始化，方便输出中间代码。附上各运算符以及其含义：
-
-| 运算符 | 含义 |
-| ---- | ---- |
-|`OpPLUS`| `+` |
-|`OpMINU`| `-` |
-|`OpMULT`| `*` |
-|`OpDIV`| `/` |
-|`OpASSIGN`| 赋值语句 |
-|`OpScanf`| 读语句 |
-|`OpPrint`| 写语句 |
-|`OpConst`| 常量定义（以及初始化） |
-|`OpVar`| 变量定义 |
-|`OpFunc`| 函数声明 |
-|`OpJMain`| 跳转到主函数（用在全局变量及初始化后） |
-|`OpExit`| 调用系统调用的结束 |
-|`OpAssArray`| 数组赋值 |
-|`OpGetArray`| 数组取值 |
-|`OpLSS`| `<` |
-|`OpLEQ`| `<=` |
-|`OpGRE`| `>` |
-|`OpGEQ`| `>=` |
-|`OpEQL`| `==` |
-|`OpNEQ`| `!=` |
-|`OpBEZ`| 操作数1为0时跳转 |
-|`OpBNEZ`| 操作数1不为0时跳转 |
-|`OpJmp`| 无条件跳转语句 |
-|`OpLabel`| 生成标签 |
-|`OpParam`| 函数形参 |
-|`OpPaVal`| 函数实参 |
-|`OpCall`| 函数调用 |
-|`OpReturn`| 函数返回 |
-|`OpRetVar `| 将返回值存储到操作数1 |
-
-示例函数：
-
-```c++
-int seed[3] = {19971231, 19981013, 1000000007};
-int i = 0;
-
-void main(){
-    int tmp = 0;
-    while(i<1000){
-        tmp = tmp + 100000 * 100000;
-        tmp = tmp - tmp / 100000 * 100000;
-        i = i + 1;
-    }
-    printf(tmp);
-    return ;
+bool isImm2Gre = value2 > 0;
+unsigned int tmpDivValueAbs = isImm2Gre ? value2 : -value2;
+bool isTwoPower = (tmpDivValueAbs & (tmpDivValueAbs - 1)) == 0;
+if (value2 == 1) {
+  MIPS_CODE("move\t" << rd1s << ",\t" << rs2s)
+} else if (value2 == 0 || !isTwoPower) {
+  MIPS_CODE("li\t\t" << rt3s << ",\t" << to_string(value2))
+    MIPS_CODE("div\t\t" << rs2s << ",\t" << rt3s)
+    MIPS_CODE("mflo\t" << rd1s)
+} else {
+  string labelDiv = "l_div_" + to_string(divLabelOffset++);
+  if (isImm2Gre) {
+    MIPS_CODE("move\t$t0,\t" << rs2s)
+  } else {
+    MIPS_CODE("sub\t\t$t0,\t$0,\t" << rs2s)
+  }
+  MIPS_CODE("bgtz\t$t0,\t" << labelDiv)
+  // 获得一个整数的二进制位数
+  unsigned int binaryOfValue = 1;
+  while ((tmpDivValueAbs >> binaryOfValue) > 0) {
+    binaryOfValue++;
+  }
+  MIPS_CODE("addiu\t$t0,\t$t0,\t" << to_string(tmpDivValueAbs - 1))
+    MIPS_PRINT(labelDiv << ":")
+    MIPS_CODE("sra\t\t" << rd1s << ",\t$t0,\t" << to_string(binaryOfValue - 1))
 }
 ```
 
-中间代码示例：
 
+
+### 3. 窥孔优化
+
+对于赋值语句的右支为临时变量的情况，可以将赋值语句合并到上一句语句。
+
+
+
+### 4. 临时寄存器分配
+
+临时变量在表达式计算过程中产生，仅存在声明和使用，生命周期在基本快内，因此采用FIFO分配方式，将临时变量分配到临时寄存器。
+
+其中对于Switch语句，表达式的结果需要多次使用，进行特判处理。
+
+
+
+### 5. 全局寄存器分配
+
+采用引用计数，统计函数内的非临时变量的变量声明和引用次数，运用优先队列的数据结构保存结果，将队列中排名靠前的分配对应的全局寄存器。
+
+```c++
+////////////////// sReg ////////////////////
+int sRegNum = 0;
+while (!funcPtr->varUseCountQueue.empty() && sRegNum < 8) {
+  string varName = funcPtr->varUseCountQueue.top().name;
+  funcPtr->varUseCountQueue.pop();
+  isGlobal = false;
+  Symbol *p_symbol = symbolTable.getSymbolPtr(&funcPtr->funcLocalTable, varName, isGlobal);
+  if (!isGlobal) {
+    sRegBusy[sRegNum] = 1;
+    sRegName[sRegNum] = varName;
+    cout << "\t\t\t\t# " << "allocate " << sRegName[sRegNum] << " to $s" << to_string(sRegNum) << endl;
+    sRegNum++;
+  }
+}
+while (sRegNum < 8) {
+  sRegBusy[sRegNum] = 0;
+  sRegNum++;
+}
+////////////////////////////////////////////
 ```
-VarDef     [symType : Int]       [string  : seed]      [int/char: 3]
-AssArr    [string  : seed]      [int/char: 0]     [int/char: 19971231]
-AssArr    [string  : seed]      [int/char: 1]     [int/char: 19981013]
-AssArr    [string  : seed]      [int/char: 2]     [int/char: 1000000007]
-VarDef    [symType : Int]       [string  : i]     [int/char: 1]
-ASSIGN    [string  : i]     [int/char: 0]
-JMain 
-FunDef    [symType : Void]      [string  : main]
-VarDef    [symType : Int]       [string  : tmp]       [int/char: 1]
-ASSIGN    [string  : tmp]       [int/char: 0]
-Label:    [string  : label_0]
-cd LSS    [string  : tmp_0]     [string  : i]     [int/char: 1000]
-bez       [string  : label_1]       [string  : tmp_0]
-MULT      [string  : tmp_1]     [int/char: 100000]    [int/char: 100000]
-PLUS      [string  : tmp_2]     [string  : tmp]       [string  : tmp_1]
-ASSIGN    [string  : tmp]       [string  : tmp_2]
-DIV       [string  : tmp_3]     [string  : tmp]       [int/char: 100000]
-MULT      [string  : tmp_4]     [string  : tmp_3]     [int/char: 100000]
-MINU      [string  : tmp_5]     [string  : tmp]       [string  : tmp_4]
-ASSIGN    [string  : tmp]       [string  : tmp_5]
-PLUS      [string  : tmp_6]     [string  : i]     [int/char: 1]
-ASSIGN    [string  : i]     [string  : tmp_6]
-Jmp to    [string  : label_0]
-Label:    [string  : label_1]
-Print     [symType : Int]       [string  : tmp]
-Print     [symType : Void]      [string  : nLine]
-Exit  
-Exit  每个操作数同样输出了类型，方便debug。
-```
-
-而对于函数的参数空间分配，将局部变量存入`sp`指针下的栈；将全局变量存入`gp`指针下的栈。偏移量在符号表中就已经存储了。
 
 
 
-## 4. 修改情况
+### 6. While、For循环优化
 
-我目前采用的四元式包括运算符、三个操作数以及一个指向下一条四元式的指针。事实上在写代码优化时我对这个架构非常后悔，目前在从四元式转换到MIPS代码时，对于每个变量和函数都需要依靠`str`的值去查表，如果可以在操作数中增加一个指向符号对象的指针，那么开销就会小很多……然而现在要改已经来不及了。
+由于优化后排名下降，故最终版本没有采用。
 
-再加上最近其他课程的DDL也纷至沓来，其实我现在想想，代码优化才是编译最有挑战性的地方，但我前期却花了大量时间在递归下降子程序分析的重复劳动中，但是下周又要进行理论课考试……之后尽量做些代码优化吧。
+
+
+### 7. 死函数删除
+
+从main函数开始广度优先搜索引用的函数，没有用到的函数则不生成对应的MIPS代码（虽然没用）。
