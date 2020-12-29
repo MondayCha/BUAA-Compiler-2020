@@ -3,7 +3,6 @@
 //
 
 #include "include/GrammarAnalyzer.h"
-#include <algorithm>
 #include <utility>
 
 SymbolType grammar_func_with_return;
@@ -445,6 +444,10 @@ void GrammarAnalyzer::varInitAnalyzer(string &lowerName, int level, int length1,
         // 一维数组
         // {
         PRINT_GET
+        if (TOKEN_TYPE == RBRACE) { ; //error
+            readToRightBrack_and_log_error();
+            return;
+        }
         int i = 0;
         for (; i < length1 - 1; i++) {
             ADD_MIDCODE(OpAssArray, lowerName, offset + i, constInVarInitAnalyzer_return_value(isInteger));

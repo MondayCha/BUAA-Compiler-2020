@@ -2,8 +2,8 @@
 // Created by dlely on 2020/11/13.
 //
 
-#include "MipsTranslator.h"
-#include "GrammarAnalyzer.h"
+#include "include/MipsTranslator.h"
+#include "include/GrammarAnalyzer.h"
 #include <fstream>
 #include <stack>
 
@@ -678,6 +678,7 @@ void MipsTranslator::saveValue(string &obj, const string &regName) {
     MIPS_CODE("sw\t\t" << regName << ",\t" << to_string(address) << "(" << pp_reg << ")")
 }
 
+#ifdef CODE_OPTIMIZE_ON
 int MipsTranslator::getTRegName(string &name) {
     for (int i = 3; i < 10; ++i) {
         if (tRegBusy[i] && tRegName[i] == name) {
@@ -840,3 +841,43 @@ void MipsTranslator::loadValue(GoalObject &goalObject, string &regName, bool ifG
         }
     }
 }
+#else
+void MipsTranslator::loadValue(GoalObject &goalObject, const string &regName, bool ifGen, bool &isImm, int &value) {
+    bool isGlobal = false;
+    Symbol *p_symbol = symbolTable.getSymbolPtr(mips_search_map, goalObject.str, isGlobal);
+    if (p_symbol != nullptr) {
+        if (p_symbol->symbolAtt == CON) {
+            if (ifGen) {
+                MIPS_CODE("li\t\t" << regName << ",\t" << to_string(((ConSym *) p_symbol)->content));
+            }
+            value = ((ConSym *) p_symbol)->content;
+            isImm = true;
+        } else {
+            int address = isGlobal ? (((VarSym *) p_symbol)->offset * 4) : -(((VarSym *) p_symbol)->offset * 4);
+            string pp_reg = p_reg;
+            MIPS_CODE("lw\t\t" << regName << ",\t" << to_string(address) << "(" << pp_reg << ")")
+        }
+    } else {
+        if (goalObject.branch == 2) {
+            if (ifGen) {
+                MIPS_CODE("li\t\t" << regName << ",\t" << goalObject.str)
+            }
+            value = goalObject.num;
+            isImm = true;
+        } else if (goalObject.str.length() > 0) {
+            if (ifGen) {
+                MIPS_CODE("li\t\t" << regName << ",\t" << goalObject.str)
+            }
+            value = 0;
+            if (isdigit(goalObject.str[0])) {
+                for (char i : goalObject.str) {
+                    value = 10 * value + (i - '0');
+                }
+            } else {
+                value = (int) ((unsigned int) goalObject.str[0]);
+            }
+            isImm = true;
+        }
+    }
+}
+#endif

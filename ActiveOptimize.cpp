@@ -2,7 +2,7 @@
 // Created by dlely on 2020/12/8.
 //
 
-#include "ActiveOptimize.h"
+#include "include/ActiveOptimize.h"
 #include <set>
 
 ActiveOptimize::ActiveOptimize(SymbolTable &pronSymbol, IRCodeManager &pronCode) : symbolTable(pronSymbol),

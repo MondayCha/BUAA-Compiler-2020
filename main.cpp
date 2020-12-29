@@ -1,9 +1,7 @@
 #include <iostream>
 #include "include/Lexer.h"
 #include "include/GrammarAnalyzer.h"
-#include "include/ErrorHandle.h"
 #include "include/MipsTranslator.h"
-#include "include/ActiveOptimize.h"
 
 using namespace std;
 

@@ -2,10 +2,9 @@
 // Created by dlely on 2020/11/11.
 //
 
-#include "IRCodeManager.h"
+#include "include/IRCodeManager.h"
 
 #include <utility>
-#include "stdlib.h"
 
 #define INIT_THREE_ADD_CODE \
 setObj(0, rrd);\
